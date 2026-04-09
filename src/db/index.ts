@@ -2,13 +2,14 @@ import Database from 'better-sqlite3';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
-import { config } from '../config';
-import { logger } from '../utils/logger';
+import { fileURLToPath } from 'node:url';
+import { config } from '../config.js';
+import { logger } from '../utils/logger.js';
 
 let db: Database.Database | null = null;
 
 function initializeSchema(database: Database.Database): void {
-  const schemaPath = join(dirname(import.meta.url.replace('file://', '')), 'schema.sql');
+  const schemaPath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
   database.exec(schema);
 }

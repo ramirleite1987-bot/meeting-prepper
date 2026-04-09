@@ -4,9 +4,9 @@
  * pre-meeting briefing with actionable sections.
  */
 
-import { ContextEntry } from '../adapters/types';
-import { getDb } from '../db/index';
-import { logger } from '../utils/logger';
+import { ContextEntry } from '../adapters/types.js';
+import { getDb } from '../db/index.js';
+import { logger } from '../utils/logger.js';
 
 // ──────────────────────────────────────────────
 // Types

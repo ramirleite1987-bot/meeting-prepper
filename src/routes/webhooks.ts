@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { webhookVerify } from '../middleware/webhook-verify.js';
 import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
+import type { TaskStatus } from '../adapters/types.js';
 
 const router = Router();
 const syncService = new SyncService();
@@ -9,11 +10,26 @@ const syncService = new SyncService();
 interface LinearWebhookPayload {
   type: string;
   action: string;
+  updatedAt?: string;
   data: {
     id: string;
     state?: { name: string };
     [key: string]: unknown;
   };
+}
+
+/** Map Linear state names to internal TaskStatus values. */
+function mapLinearStatus(stateName: string): TaskStatus {
+  const map: Record<string, TaskStatus> = {
+    'Backlog': 'backlog',
+    'Todo': 'todo',
+    'In Progress': 'in-progress',
+    'In Review': 'in-review',
+    'Done': 'done',
+    'Cancelled': 'cancelled',
+    'Canceled': 'cancelled',
+  };
+  return map[stateName] ?? 'todo';
 }
 
 router.post('/linear', webhookVerify, (req: Request, res: Response) => {
@@ -27,12 +43,13 @@ router.post('/linear', webhookVerify, (req: Request, res: Response) => {
       return;
     }
 
-    const statusName = payload.data.state?.name ?? 'Unknown';
+    const statusName = payload.data.state?.name ?? 'Todo';
 
     syncService
       .handleLinearUpdate({
         linearIssueId: payload.data.id,
-        status: statusName,
+        status: mapLinearStatus(statusName),
+        updatedAt: payload.updatedAt ?? new Date().toISOString(),
       })
       .catch((err: unknown) => {
         logger.error('Error processing Linear webhook', {

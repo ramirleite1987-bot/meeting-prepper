@@ -4,8 +4,9 @@
  * a unified context timeline for a given client.
  */
 
-import { IContextAdapter, ContextEntry } from '../adapters/types';
+import { IContextAdapter, ContextEntry } from '../adapters/types.js';
 import { queries } from '../db/index.js';
+import { logger } from '../utils/logger.js';
 
 export interface TimelineEvent {
   id: string;
@@ -58,7 +59,7 @@ export class ClientContextService {
       this.adapters.map(async (adapter) => {
         const available = await adapter.isAvailable();
         if (!available) {
-          console.warn(
+          logger.warn(
             `[ClientContextService] Adapter "${adapter.name}" is not available, skipping.`,
           );
           return [] as ContextEntry[];
@@ -74,7 +75,7 @@ export class ClientContextService {
       if (result.status === 'fulfilled') {
         entries.push(...result.value);
       } else {
-        console.warn(
+        logger.warn(
           `[ClientContextService] Adapter "${this.adapters[i].name}" failed: ${result.reason}`,
         );
       }

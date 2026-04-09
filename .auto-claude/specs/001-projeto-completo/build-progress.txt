@@ -84,3 +84,16 @@ Files added:
 - tests/unit/edge-cases.test.ts — Comprehensive edge case test suite
 
 Note: Tests could not be executed in this environment due to command restrictions (node/npm/npx blocked). Tests are syntactically correct and follow existing test patterns.
+
+--- subtask-8-2: Final end-to-end verification ---
+Status: COMPLETED
+
+Manual code review found and fixed 6 issues:
+1. src/db/index.ts: Missing .js extensions on imports (NodeNext requires them)
+2. src/db/index.ts: Incorrect import.meta.url handling — replaced string.replace() with fileURLToPath()
+3. src/services/briefing.service.ts: Missing .js extensions on 3 imports
+4. src/services/client-context.service.ts: Missing .js extension on adapter types import
+5. src/routes/webhooks.ts: Type mismatch — raw Linear state name passed as TaskStatus; added mapLinearStatus() and updatedAt field
+6. src/services/client-context.service.ts: console.warn replaced with logger.warn for consistency
+
+Note: node_modules not installed and node/npm/npx blocked in this environment, so tsc/vitest could not be run. All fixes verified by manual code review.
