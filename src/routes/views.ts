@@ -185,4 +185,64 @@ router.post('/briefing/prepare', async (req: Request, res: Response, next: NextF
   }
 });
 
+// ──────────────────────────────────────────────
+// Post-call review view
+// ──────────────────────────────────────────────
+
+router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const meeting = queries.getMeetingById().get(req.params.id) as Record<string, unknown> | undefined;
+    if (!meeting) {
+      res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
+      return;
+    }
+
+    let postCall = null;
+    if (meeting.post_call_notes) {
+      postCall = JSON.parse(meeting.post_call_notes as string);
+    }
+
+    // Also gather consolidated data from meeting_sources
+    if (!postCall) {
+      const sources = queries.getMeetingSourcesByMeeting().all(req.params.id) as Record<string, unknown>[];
+      if (sources.length > 0) {
+        const summaries: string[] = [];
+        const decisions: string[] = [];
+        const risks: string[] = [];
+        for (const src of sources) {
+          if (src.summary) summaries.push(src.summary as string);
+          if (src.decisions) {
+            try { decisions.push(...JSON.parse(src.decisions as string)); } catch { /* skip */ }
+          }
+          if (src.risks) {
+            try { risks.push(...JSON.parse(src.risks as string)); } catch { /* skip */ }
+          }
+        }
+        if (summaries.length > 0 || decisions.length > 0 || risks.length > 0) {
+          postCall = {
+            summary: summaries.join(' '),
+            decisions,
+            risks,
+          };
+        }
+      }
+    }
+
+    const actionItems = (queries.getActionItemsByMeeting().all(req.params.id) as Record<string, unknown>[]).map(item => ({
+      ...item,
+      priorityClass: item.priority === 'high' ? 'bg-red-100 text-red-800' :
+                     item.priority === 'low' ? 'bg-green-100 text-green-800' :
+                     'bg-yellow-100 text-yellow-800',
+    }));
+
+    const template = loadTemplate('post-call');
+    const content = renderSimpleTemplate(template, { meeting, postCall, actionItems });
+    const html = renderLayout('Post-Call Review', content);
+
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export { router as viewRouter };
