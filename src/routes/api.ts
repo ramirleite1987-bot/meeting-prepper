@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { queries } from '../db/index.js';
 import { BriefingService } from '../services/briefing.service.js';
 import { ClientContextService } from '../services/client-context.service.js';
+import { ExtractionService } from '../services/extraction.service.js';
 import { logger } from '../utils/logger.js';
 import { AppError } from '../middleware/error-handler.js';
 
@@ -11,6 +12,7 @@ const router = Router();
 // Shared service instances
 const clientContextService = new ClientContextService();
 const briefingService = new BriefingService();
+const extractionService = new ExtractionService();
 
 function createError(message: string, statusCode: number): AppError {
   const err = new Error(message) as AppError;
@@ -180,4 +182,56 @@ router.get('/meetings/:id/briefing', (req: Request, res: Response, next: NextFun
   }
 });
 
-export { router as apiRouter, clientContextService, briefingService };
+// ──────────────────────────────────────────────
+// Post-Call Extraction
+// ──────────────────────────────────────────────
+
+router.post('/meetings/:id/extract', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const meeting = queries.getMeetingById().get(req.params.id);
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const result = await extractionService.extract(req.params.id);
+
+    logger.info('Extraction completed', { meetingId: req.params.id, sources: result.sources.length });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/meetings/:id/post-call', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const meeting = queries.getMeetingById().get(req.params.id) as Record<string, unknown> | undefined;
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const postCallNotes = meeting.post_call_notes;
+    if (!postCallNotes) {
+      throw createError('No post-call data available yet', 404);
+    }
+
+    res.json(JSON.parse(postCallNotes as string));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/meetings/:id/action-items', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const meeting = queries.getMeetingById().get(req.params.id);
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const actionItems = queries.getActionItemsByMeeting().all(req.params.id);
+    res.json(actionItems);
+  } catch (err) {
+    next(err);
+  }
+});
+
+export { router as apiRouter, clientContextService, briefingService, extractionService };
