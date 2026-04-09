@@ -6,6 +6,7 @@ import { getDb, closeDb } from './db/index.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { apiRouter } from './routes/api.js';
 import { viewRouter } from './routes/views.js';
+import webhookRouter from './routes/webhooks.js';
 import { logger } from './utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +38,9 @@ app.use(express.static(join(__dirname, '..', 'public')));
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Webhook routes
+app.use('/webhooks', webhookRouter);
 
 // API routes
 app.use('/api', apiRouter);
