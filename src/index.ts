@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { getDb, closeDb } from './db/index.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { apiRouter } from './routes/api.js';
 import { logger } from './utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +36,9 @@ app.use(express.static(join(__dirname, '..', 'public')));
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// API routes
+app.use('/api', apiRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
