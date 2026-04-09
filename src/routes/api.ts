@@ -4,6 +4,7 @@ import { queries } from '../db/index.js';
 import { BriefingService } from '../services/briefing.service.js';
 import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
+import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
 import { AppError } from '../middleware/error-handler.js';
 
@@ -13,6 +14,7 @@ const router = Router();
 const clientContextService = new ClientContextService();
 const briefingService = new BriefingService();
 const extractionService = new ExtractionService();
+const syncService = new SyncService();
 
 function createError(message: string, statusCode: number): AppError {
   const err = new Error(message) as AppError;
@@ -234,4 +236,40 @@ router.get('/meetings/:id/action-items', (req: Request, res: Response, next: Nex
   }
 });
 
-export { router as apiRouter, clientContextService, briefingService, extractionService };
+// ──────────────────────────────────────────────
+// Linear Sync
+// ──────────────────────────────────────────────
+
+router.post('/meetings/:id/action-items/:itemId/sync', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const meeting = queries.getMeetingById().get(req.params.id);
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const result = await syncService.syncActionItem(req.params.id, req.params.itemId);
+
+    logger.info('Action item synced', { meetingId: req.params.id, actionItemId: req.params.itemId });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/meetings/:id/sync-all', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const meeting = queries.getMeetingById().get(req.params.id);
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const result = await syncService.syncAllActionItems(req.params.id);
+
+    logger.info('All action items synced', { meetingId: req.params.id, synced: result.results.length });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+export { router as apiRouter, clientContextService, briefingService, extractionService, syncService };
