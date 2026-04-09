@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { getDb, closeDb } from './db/index.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { apiRouter } from './routes/api.js';
+import { viewRouter } from './routes/views.js';
 import { logger } from './utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,9 @@ app.get('/health', (_req, res) => {
 
 // API routes
 app.use('/api', apiRouter);
+
+// View routes
+app.use('/', viewRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);

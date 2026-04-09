@@ -1,0 +1,83 @@
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Back to Dashboard</a>
+      <h1 class="text-2xl font-bold text-gray-900 mt-2">{{meeting.title}}</h1>
+      <p class="text-gray-500">{{meeting.client_name}} &middot; {{meeting.scheduled_at}}</p>
+    </div>
+  </div>
+
+  {{#if briefing}}
+  <!-- Executive Summary -->
+  {{#if briefing.executiveSummary}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Executive Summary</h2>
+    <p class="text-gray-700 leading-relaxed">{{briefing.executiveSummary}}</p>
+  </section>
+  {{/if}}
+
+  <!-- Key Topics -->
+  {{#if briefing.keyTopics}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Key Topics</h2>
+    <ul class="list-disc list-inside space-y-1 text-gray-700">
+      {{#each briefing.keyTopics}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  <!-- Client Background -->
+  {{#if briefing.clientBackground}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Client Background</h2>
+    <p class="text-gray-700 leading-relaxed">{{briefing.clientBackground}}</p>
+  </section>
+  {{/if}}
+
+  <!-- Talking Points -->
+  {{#if briefing.talkingPoints}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Talking Points</h2>
+    <ul class="list-disc list-inside space-y-1 text-gray-700">
+      {{#each briefing.talkingPoints}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  <!-- Action Items -->
+  {{#if briefing.actionItems}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Action Items</h2>
+    <ul class="list-disc list-inside space-y-1 text-gray-700">
+      {{#each briefing.actionItems}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  <!-- Risks & Concerns -->
+  {{#if briefing.risks}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Risks &amp; Concerns</h2>
+    <ul class="list-disc list-inside space-y-1 text-gray-700">
+      {{#each briefing.risks}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  {{else}}
+  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+    <p class="text-yellow-800">No briefing has been generated yet.</p>
+    <form method="POST" action="/briefing/{{meeting.id}}/prepare" class="mt-4">
+      <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Generate Briefing</button>
+    </form>
+  </div>
+  {{/if}}
+</div>

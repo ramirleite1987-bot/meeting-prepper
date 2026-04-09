@@ -1,0 +1,79 @@
+<div class="space-y-8">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+    <button
+      onclick="document.getElementById('prepare-modal').classList.toggle('hidden')"
+      class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition"
+    >
+      Prepare Meeting
+    </button>
+  </div>
+
+  <!-- Upcoming Meetings -->
+  <section>
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">Upcoming Meetings</h2>
+    <div class="bg-white shadow rounded-lg divide-y divide-gray-200">
+      {{#if meetings.length}}
+      {{#each meetings}}
+      <div class="p-4 flex items-center justify-between">
+        <div>
+          <p class="font-medium text-gray-900">{{this.title}}</p>
+          <p class="text-sm text-gray-500">{{this.client_name}} &middot; {{this.scheduled_at}}</p>
+        </div>
+        <div class="flex space-x-2">
+          {{#if this.briefing}}
+          <a href="/briefing/{{this.id}}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View Briefing</a>
+          {{else}}
+          <form method="POST" action="/briefing/{{this.id}}/prepare">
+            <button type="submit" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Generate Briefing</button>
+          </form>
+          {{/if}}
+        </div>
+      </div>
+      {{/each}}
+      {{else}}
+      <p class="p-4 text-gray-500">No upcoming meetings.</p>
+      {{/if}}
+    </div>
+  </section>
+
+  <!-- Recent Clients -->
+  <section>
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">Recent Clients</h2>
+    <div class="bg-white shadow rounded-lg divide-y divide-gray-200">
+      {{#if clients.length}}
+      {{#each clients}}
+      <div class="p-4">
+        <p class="font-medium text-gray-900">{{this.name}}</p>
+        <p class="text-sm text-gray-500">{{this.project}}</p>
+      </div>
+      {{/each}}
+      {{else}}
+      <p class="p-4 text-gray-500">No clients yet.</p>
+      {{/if}}
+    </div>
+  </section>
+</div>
+
+<!-- Prepare Modal -->
+<div id="prepare-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+    <h3 class="text-lg font-semibold mb-4">Prepare a Meeting</h3>
+    <form method="POST" action="/briefing/prepare">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Meeting</label>
+          <select name="meetingId" required class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+            {{#each meetings}}
+            <option value="{{this.id}}">{{this.title}} ({{this.client_name}})</option>
+            {{/each}}
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2">
+          <button type="button" onclick="document.getElementById('prepare-modal').classList.add('hidden')" class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Generate Briefing</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
