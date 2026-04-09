@@ -5,6 +5,16 @@
  */
 
 import { IContextAdapter, ContextEntry } from '../adapters/types';
+import { queries } from '../db/index.js';
+
+export interface TimelineEvent {
+  id: string;
+  client_id: string;
+  meeting_id: string | null;
+  event_type: string;
+  event_data: string;
+  occurred_at: string;
+}
 
 export interface ClientContextOptions {
   since?: Date;
@@ -80,5 +90,13 @@ export class ClientContextService {
     }
 
     return entries;
+  }
+
+  /**
+   * Query the client_history table for a given client,
+   * returning events ordered by occurred_at descending.
+   */
+  getClientTimeline(clientId: string): TimelineEvent[] {
+    return queries.getClientHistory().all(clientId) as TimelineEvent[];
   }
 }

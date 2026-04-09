@@ -186,6 +186,44 @@ router.post('/briefing/prepare', async (req: Request, res: Response, next: NextF
 });
 
 // ──────────────────────────────────────────────
+// Client detail / timeline view
+// ──────────────────────────────────────────────
+
+router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const client = queries.getClientById().get(req.params.id) as Record<string, unknown> | undefined;
+    if (!client) {
+      res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Client not found.</p>'));
+      return;
+    }
+
+    const timeline = clientContextService.getClientTimeline(req.params.id);
+    const events = timeline.map((evt: Record<string, unknown>) => {
+      let parsed: Record<string, unknown> = {};
+      try { parsed = JSON.parse(evt.event_data as string); } catch { /* skip */ }
+      return {
+        ...evt,
+        parsed_title: parsed.title || parsed.name || evt.event_type,
+        parsed_description: parsed.description || parsed.summary || '',
+        linear_issue_id: parsed.linear_issue_id || null,
+        type_class: evt.event_type === 'meeting' ? 'bg-indigo-100 text-indigo-800' :
+                    evt.event_type === 'task_created' ? 'bg-green-100 text-green-800' :
+                    evt.event_type === 'task_updated' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800',
+      };
+    });
+
+    const template = loadTemplate('client-detail');
+    const content = renderSimpleTemplate(template, { client, events });
+    const html = renderLayout(`${client.name} - Timeline`, content);
+
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
 // Post-call review view
 // ──────────────────────────────────────────────
 

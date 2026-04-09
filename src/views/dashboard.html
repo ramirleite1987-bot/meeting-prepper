@@ -43,9 +43,12 @@
     <div class="bg-white shadow rounded-lg divide-y divide-gray-200">
       {{#if clients.length}}
       {{#each clients}}
-      <div class="p-4">
-        <p class="font-medium text-gray-900">{{this.name}}</p>
-        <p class="text-sm text-gray-500">{{this.project}}</p>
+      <div class="p-4 flex items-center justify-between">
+        <div>
+          <p class="font-medium text-gray-900">{{this.name}}</p>
+          <p class="text-sm text-gray-500">{{this.project}}</p>
+        </div>
+        <a href="/clients/{{this.id}}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View Timeline</a>
       </div>
       {{/each}}
       {{else}}
