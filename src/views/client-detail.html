@@ -1,0 +1,40 @@
+<div class="space-y-8">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">{{client.name}}</h1>
+      <p class="text-sm text-gray-500">{{client.project}}</p>
+    </div>
+    <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Back to Dashboard</a>
+  </div>
+
+  <!-- Timeline -->
+  <section>
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">Timeline</h2>
+    <div class="bg-white shadow rounded-lg divide-y divide-gray-200">
+      {{#if events.length}}
+      {{#each events}}
+      <div class="p-4">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{this.type_class}}">{{this.event_type}}</span>
+            <span class="font-medium text-gray-900">{{this.parsed_title}}</span>
+          </div>
+          <span class="text-sm text-gray-500">{{this.occurred_at}}</span>
+        </div>
+        <p class="text-sm text-gray-600">{{this.parsed_description}}</p>
+        <div class="mt-1 flex space-x-3 text-sm">
+          {{#if this.meeting_id}}
+          <a href="/briefing/{{this.meeting_id}}" class="text-indigo-600 hover:text-indigo-800">View Meeting</a>
+          {{/if}}
+          {{#if this.linear_issue_id}}
+          <span class="text-gray-500">Linear: {{this.linear_issue_id}}</span>
+          {{/if}}
+        </div>
+      </div>
+      {{/each}}
+      {{else}}
+      <p class="p-4 text-gray-500">No timeline events yet.</p>
+      {{/if}}
+    </div>
+  </section>
+</div>

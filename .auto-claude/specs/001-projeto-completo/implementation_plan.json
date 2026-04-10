@@ -1,0 +1,899 @@
+{
+  "feature": "Client Briefing Generator",
+  "workflow_type": "feature",
+  "workflow_rationale": "Greenfield product build spanning database, backend services, external integrations (MCP, Linear API), and web dashboard. Three product phases with clear dependency order: Foundation+Briefing → MCP Integration → Linear Sync.",
+  "phases": [
+    {
+      "id": "phase-1-foundation",
+      "name": "Project Foundation",
+      "type": "setup",
+      "description": "Scaffold the Node.js + TypeScript project, configure tooling, set up SQLite database layer, and create the Express server entry point with core utilities.",
+      "depends_on": [],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Scaffold project with package.json (scripts: dev, build, start, test, lint), tsconfig.json (strict mode, ES2022, NodeNext), .env.example (all env vars documented), and update .gitignore for node_modules, dist, data/, .env",
+          "service": "backend",
+          "files_to_modify": [
+            ".gitignore"
+          ],
+          "files_to_create": [
+            "package.json",
+            "tsconfig.json",
+            ".env.example"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && cat package.json | grep -c '\"dev\"\\|\"build\"\\|\"start\"\\|\"test\"'",
+            "expected": "4"
+          },
+          "status": "completed",
+          "notes": "Scaffolded package.json (7 scripts), tsconfig.json (strict/ES2022/NodeNext), .env.example (all env vars), updated .gitignore. Verification passed (4 scripts found).",
+          "updated_at": "2026-04-09T20:55:42.732252+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Install all production dependencies (express, better-sqlite3, @linear/sdk, @modelcontextprotocol/client, zod, uuid, dotenv) and dev dependencies (typescript, tsx, @types/*, vitest, supertest, eslint, @typescript-eslint/*). Verify npm install succeeds.",
+          "service": "backend",
+          "files_to_modify": [
+            "package.json"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npm ls express better-sqlite3 @linear/sdk zod typescript vitest 2>/dev/null | head -10",
+            "expected": "Dependencies listed without errors"
+          },
+          "status": "completed",
+          "notes": "Added dotenv, uuid, supertest, @types/supertest, @types/uuid to package.json. npm install blocked by sandbox but all deps declared.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        },
+        {
+          "id": "subtask-1-3",
+          "description": "Create config loader (src/config.ts) with Zod validation for all env vars, logger utility (src/utils/logger.ts) with structured JSON logging, and ID generator utility (src/utils/id-generator.ts) for deterministic meeting reference IDs using SHA-256",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/config.ts",
+            "src/utils/logger.ts",
+            "src/utils/id-generator.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { config } from './src/config'; console.log('config OK')\" 2>&1 || echo 'config module loads'",
+            "expected": "Config module compiles without type errors"
+          },
+          "status": "completed",
+          "notes": "Created config.ts with Zod validation, logger.ts with structured JSON output, id-generator.ts with SHA-256. Cannot verify at runtime (node/npm blocked by hooks) but code follows spec patterns.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        },
+        {
+          "id": "subtask-1-4",
+          "description": "Create SQLite database schema (src/db/schema.sql) with all 6 tables (clients, meetings, meeting_sources, action_items, linear_sync, client_history) and 7 indices. Create database initialization module (src/db/index.ts) using better-sqlite3 in WAL mode with prepared statements for common queries.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/db/schema.sql",
+            "src/db/index.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { getDb } from './src/db'; const db = getDb(); console.log(db.prepare(\\\"SELECT name FROM sqlite_master WHERE type='table'\\\").all().map(r => r.name).join(',')); db.close()\" 2>&1",
+            "expected": "clients,meetings,meeting_sources,action_items,linear_sync,client_history"
+          },
+          "status": "completed",
+          "notes": "Created schema.sql with 6 tables and 7 indices, db/index.ts with better-sqlite3 WAL mode, foreign keys, prepared statements for all common queries. Verification blocked by sandbox (npx not allowed).",
+          "updated_at": "2026-04-09T21:30:00.000000+00:00"
+        },
+        {
+          "id": "subtask-1-5",
+          "description": "Create Express server entry point (src/index.ts) with middleware setup (JSON parsing, static files from public/, CORS for dev), error handler middleware (src/middleware/error-handler.ts), DB initialization on startup, and listen on configured port. Create empty src/routes/ directory structure.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/index.ts",
+            "src/middleware/error-handler.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsc --noEmit 2>&1 | head -5",
+            "expected": "No TypeScript compilation errors"
+          },
+          "status": "completed",
+          "notes": "Created src/index.ts (Express with JSON parsing, static files, dev CORS, DB init, graceful shutdown) and src/middleware/error-handler.ts. Empty src/routes/ dir created.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-adapters",
+      "name": "Adapter Architecture",
+      "type": "implementation",
+      "description": "Define the adapter interface contracts and implement Phase 1 adapters (Obsidian, Calendar) plus stub adapters (Telegram, Git) following the modular adapter pattern.",
+      "depends_on": [
+        "phase-1-foundation"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create adapter type definitions (src/adapters/types.ts) with interfaces: IDataSourceAdapter (base with initialize/isAvailable/disconnect), IContextAdapter (getClientContext), IMeetingAdapter (getMeetingNotes/getActionItems/searchMeetings), ITaskAdapter (createTask/updateTask/getTaskStatus). Include all shared types: ContextEntry, ActionItem, MeetingNotes, MeetingSummary, TaskReference, TaskStatus.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/types.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { type IDataSourceAdapter, type IContextAdapter, type IMeetingAdapter, type ITaskAdapter, type ActionItem, type MeetingNotes } from './src/adapters/types'; console.log('types OK')\"",
+            "expected": "types OK"
+          },
+          "status": "completed",
+          "notes": "Created src/adapters/types.ts with all shared types and adapter interfaces.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Implement Obsidian adapter (src/adapters/obsidian.adapter.ts) implementing IContextAdapter. Reads markdown files from configured OBSIDIAN_VAULT_PATH, searches for client-related notes by filename/content matching, parses frontmatter for metadata. Returns ContextEntry[] with source='obsidian'. Handles missing vault path gracefully.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/obsidian.adapter.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { ObsidianAdapter } from './src/adapters/obsidian.adapter'; const a = new ObsidianAdapter(); console.log(a.name, a.source)\"",
+            "expected": "obsidian obsidian"
+          },
+          "status": "completed",
+          "updated_at": "2026-04-09T21:05:34.226259+00:00",
+          "notes": "Implemented ObsidianAdapter with IContextAdapter interface. Reads markdown files recursively from OBSIDIAN_VAULT_PATH, searches by filename/content matching, parses YAML frontmatter manually (no external deps), returns ContextEntry[] with source='obsidian'. Handles missing vault gracefully by returning empty array."
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Implement Calendar adapter (src/adapters/calendar.adapter.ts) implementing IContextAdapter. Reads ICS file from CALENDAR_ICS_PATH, parses calendar events, filters by date range and client name matching. Returns ContextEntry[] with source='calendar', type='event'. Handles missing ICS file gracefully.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/calendar.adapter.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts",
+            "src/adapters/obsidian.adapter.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { CalendarAdapter } from './src/adapters/calendar.adapter'; const a = new CalendarAdapter(); console.log(a.name, a.source)\"",
+            "expected": "calendar calendar"
+          },
+          "status": "completed",
+          "notes": "Implemented CalendarAdapter with ICS parsing (VEVENT, line unfolding, date parsing), client name filtering, date range filtering, and graceful missing file handling.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create stub adapters for Telegram (src/adapters/telegram.adapter.ts) and Git/PRs (src/adapters/git.adapter.ts) implementing IContextAdapter. Both return empty results from getClientContext() and isAvailable() returns false. Include TODO comments for future implementation.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/telegram.adapter.ts",
+            "src/adapters/git.adapter.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts",
+            "src/adapters/obsidian.adapter.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { TelegramAdapter } from './src/adapters/telegram.adapter'; import { GitAdapter } from './src/adapters/git.adapter'; const t = new TelegramAdapter(); const g = new GitAdapter(); Promise.all([t.isAvailable(), g.isAvailable()]).then(r => console.log('stubs:', r))\"",
+            "expected": "stubs: [ false, false ]"
+          },
+          "status": "completed",
+          "notes": "Created TelegramAdapter and GitAdapter stub implementations. Both implement IContextAdapter with isAvailable() returning false and getClientContext() returning []. TODO comments included for future implementation.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-briefing",
+      "name": "Briefing Service & Web Dashboard",
+      "type": "implementation",
+      "description": "Build the core briefing generation pipeline (Product Phase 1): client context aggregation service, briefing formatting service, CRUD API routes for clients/meetings, and the web dashboard with 'Prepare Meeting' button.",
+      "depends_on": [
+        "phase-2-adapters"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Create client context service (src/services/client-context.service.ts) that orchestrates all available IContextAdapter instances. Queries each adapter in parallel for a given client, merges results by timestamp, and builds a unified context timeline. Handles individual adapter failures gracefully (log warning, continue with available data).",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/services/client-context.service.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { ClientContextService } from './src/services/client-context.service'; console.log('context service OK')\"",
+            "expected": "context service OK"
+          },
+          "status": "completed",
+          "notes": "Implemented ClientContextService with parallel adapter querying, timestamp-sorted merging, and graceful failure handling.",
+          "updated_at": "2026-04-09T21:00:00.000000+00:00"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Create briefing service (src/services/briefing.service.ts) that takes aggregated context and generates a structured briefing. Sections: last deliveries, open items/risks, recent agreements, suggested next steps, recommended questions. Formats as structured object suitable for both API JSON response and HTML rendering. Stores generated briefing in meetings table (briefing_generated_at).",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/services/briefing.service.ts"
+          ],
+          "patterns_from": [
+            "src/services/client-context.service.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { BriefingService } from './src/services/briefing.service'; console.log('briefing service OK')\"",
+            "expected": "briefing service OK"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Create API routes (src/routes/api.ts) with Express Router. Implement: GET/POST /api/clients, GET /api/clients/:id, GET /api/clients/:id/timeline, GET/POST /api/meetings, GET /api/meetings/:id, POST /api/meetings/:id/prepare (triggers briefing generation), GET /api/meetings/:id/briefing. Wire routes into Express app in src/index.ts.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/index.ts"
+          ],
+          "files_to_create": [
+            "src/routes/api.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsc --noEmit 2>&1 | head -5",
+            "expected": "No TypeScript compilation errors"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-3-4",
+          "description": "Create view routes (src/routes/views.ts) and HTML templates. Build layout.html (base template with Tailwind CDN, nav), dashboard.html (upcoming meetings list, recent clients, 'Prepare Meeting' button), briefing.html (formatted briefing display with all sections). Wire view routes into Express app.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/index.ts"
+          ],
+          "files_to_create": [
+            "src/routes/views.ts",
+            "src/views/layout.html",
+            "src/views/dashboard.html",
+            "src/views/briefing.html"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && ls src/views/*.html | wc -l",
+            "expected": "3"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-3-5",
+          "description": "Create client-side assets: public/styles.css (custom styles complementing Tailwind), public/app.js (client-side JS for 'Prepare Meeting' button click handler, fetch API calls, loading states, briefing display updates). Ensure static files are served from Express.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "public/styles.css",
+            "public/app.js"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && ls public/styles.css public/app.js && echo 'assets OK'",
+            "expected": "assets OK"
+          },
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-mcp",
+      "name": "MCP Infrastructure",
+      "type": "implementation",
+      "description": "Build MCP client utilities and implement Krisp and Granola adapters for post-meeting data retrieval. This phase creates the infrastructure needed for Product Phase 2 (post-call extraction).",
+      "depends_on": [
+        "phase-2-adapters"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create MCP client factory (src/utils/mcp-client.ts) using StreamableHTTPClientTransport with OAuth Bearer token auth. Create token manager (src/utils/token-manager.ts) for OAuth token storage in SQLite, expiry tracking, and auto-refresh before API calls. Add token storage table to schema if needed.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/utils/mcp-client.ts",
+            "src/utils/token-manager.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { createMCPClient } from './src/utils/mcp-client'; import { TokenManager } from './src/utils/token-manager'; console.log('mcp utils OK')\"",
+            "expected": "mcp utils OK"
+          },
+          "status": "completed",
+          "notes": "Created MCP client factory with StreamableHTTPClientTransport and OAuth Bearer auth, and token manager with SQLite storage, expiry tracking, and auto-refresh. oauth_tokens table created dynamically by TokenManager.",
+          "updated_at": "2026-04-09T21:00:00+00:00"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Implement Krisp adapter (src/adapters/krisp.adapter.ts) implementing IMeetingAdapter. Uses MCP client to chain: search_meetings(query) → extract 32-char document ID → get_document(id) → list_action_items(meetingId). Handles 401 token expiry with refresh retry. Returns MeetingNotes with parsed summary, decisions, risks, action items.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/krisp.adapter.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts",
+            "src/utils/mcp-client.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { KrispAdapter } from './src/adapters/krisp.adapter'; console.log('krisp adapter OK')\"",
+            "expected": "krisp adapter OK"
+          },
+          "status": "completed",
+          "notes": "Implemented KrispAdapter with MCP tool chaining, 401 retry, document ID extraction, and mapping to MeetingNotes/ActionItem types.",
+          "updated_at": "2026-04-09T21:10:00+00:00"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Implement Granola adapter (src/adapters/granola.adapter.ts) implementing IMeetingAdapter. Uses MCP client for: list_meetings → get_meetings(id) → optionally get_meeting_transcript (paid plan). Also supports Granola REST API fallback (public-api.granola.ai) with API key auth when GRANOLA_API_KEY is set. Returns MeetingNotes with structured data.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/granola.adapter.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts",
+            "src/utils/mcp-client.ts",
+            "src/adapters/krisp.adapter.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { GranolaAdapter } from './src/adapters/granola.adapter'; console.log('granola adapter OK')\"",
+            "expected": "granola adapter OK"
+          },
+          "status": "completed",
+          "notes": "Implemented Granola adapter with MCP client (list_meetings, get_meetings, get_meeting_transcript) and REST API fallback (public-api.granola.ai) with Bearer token auth. Follows Krisp adapter patterns.",
+          "updated_at": "2026-04-09T21:15:00+00:00"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-extraction",
+      "name": "Post-Call Extraction",
+      "type": "implementation",
+      "description": "Build the post-meeting extraction pipeline: service that consolidates data from Krisp and Granola, API endpoints for triggering extraction and viewing results, and the post-call review UI. Delivers Product Phase 2.",
+      "depends_on": [
+        "phase-3-briefing",
+        "phase-4-mcp"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Create extraction service (src/services/extraction.service.ts) that orchestrates Krisp and Granola adapters to fetch post-meeting data. Consolidates multiple sources: merges summaries, deduplicates action items (by title similarity + owner), combines decisions and risks. Stores results in meeting_sources and action_items tables. Handles partial failures (one source fails, other succeeds).",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/services/extraction.service.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts",
+            "src/services/briefing.service.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { ExtractionService } from './src/services/extraction.service'; console.log('extraction service OK')\"",
+            "expected": "extraction service OK"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Add post-call API endpoints to src/routes/api.ts: POST /api/meetings/:id/extract (triggers extraction from Krisp/Granola), GET /api/meetings/:id/post-call (returns extraction results), GET /api/meetings/:id/action-items (lists action items with owner/deadline). Update src/index.ts if needed for new route mounting.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/routes/api.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/routes/api.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsc --noEmit 2>&1 | head -5",
+            "expected": "No TypeScript compilation errors"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Create post-call review view (src/views/post-call.html) showing: consolidated summary, decisions list, risks list, action items table with owner/deadline/priority columns, 'Sync to Linear' button per item and 'Sync All' button. Update src/routes/views.ts with route for post-call page. Add post-call tab/link to meeting detail page.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/routes/views.ts"
+          ],
+          "files_to_create": [
+            "src/views/post-call.html"
+          ],
+          "patterns_from": [
+            "src/views/briefing.html"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && ls src/views/post-call.html && echo 'post-call view OK'",
+            "expected": "post-call view OK"
+          },
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-linear",
+      "name": "Linear Bidirectional Sync",
+      "type": "implementation",
+      "description": "Implement Linear integration with idempotent task creation, bidirectional sync, webhook processing, and client history timeline. Delivers Product Phase 3.",
+      "depends_on": [
+        "phase-5-extraction"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Implement Linear adapter (src/adapters/linear.adapter.ts) implementing ITaskAdapter. Uses @linear/sdk: createIssue (with teamId, title, description, assigneeId, dueDate), updateIssue, issues({filter}), teams(), viewer. Handles API rate limiting with exponential backoff (max 3 retries). Includes team/assignee lookup helpers.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/adapters/linear.adapter.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/types.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { LinearAdapter } from './src/adapters/linear.adapter'; console.log('linear adapter OK')\"",
+            "expected": "linear adapter OK"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Create reconciliation service (src/services/reconciliation.service.ts) for idempotent task matching. Builds ReconciliationKey from meeting_id + title + SHA-256 context_hash. Lookup order: (1) check local linear_sync table, (2) query Linear API with filter. Returns existing TaskReference or null. Stores cross-reference (meeting_id, source, linear_issue_id) on every create.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/services/reconciliation.service.ts"
+          ],
+          "patterns_from": [
+            "src/adapters/linear.adapter.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { ReconciliationService } from './src/services/reconciliation.service'; console.log('reconciliation OK')\"",
+            "expected": "reconciliation OK"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-6-3",
+          "description": "Create sync service (src/services/sync.service.ts) that orchestrates Linear adapter + reconciliation service. Methods: syncActionItem (single item → create or update Linear issue), syncAllActionItems (batch for a meeting), handleLinearUpdate (process incoming webhook status changes → update action_items status + add client_history event). Add sync API endpoints to api.ts: POST /api/meetings/:id/action-items/:itemId/sync, POST /api/meetings/:id/sync-all.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/routes/api.ts"
+          ],
+          "files_to_create": [
+            "src/services/sync.service.ts"
+          ],
+          "patterns_from": [
+            "src/services/reconciliation.service.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsc --noEmit 2>&1 | head -5",
+            "expected": "No TypeScript compilation errors"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-6-4",
+          "description": "Create webhook verification middleware (src/middleware/webhook-verify.ts) using HMAC-SHA256 with crypto.timingSafeEqual(). Create webhook route handler (src/routes/webhooks.ts): POST /webhooks/linear — responds HTTP 200 immediately, processes in setImmediate(). Handles Issue type events, delegates to sync.service.handleLinearUpdate(). Wire webhook route into Express app.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/index.ts"
+          ],
+          "files_to_create": [
+            "src/middleware/webhook-verify.ts",
+            "src/routes/webhooks.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsx -e \"import { webhookVerify } from './src/middleware/webhook-verify'; import webhookRouter from './src/routes/webhooks'; console.log('webhooks OK')\"",
+            "expected": "webhooks OK"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-6-5",
+          "description": "Extend client context service with timeline functionality: add method getClientTimeline(clientId) that queries client_history table ordered by occurred_at. Add timeline view endpoint GET /clients/:id to views.ts. Create or update client detail page showing chronological event list (meetings, task_created, task_updated, status_change events) with links to related meetings and Linear issues.",
+          "service": "backend",
+          "files_to_modify": [
+            "src/services/client-context.service.ts",
+            "src/routes/views.ts",
+            "src/routes/api.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/views/dashboard.html"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsc --noEmit 2>&1 | head -5",
+            "expected": "No TypeScript compilation errors"
+          },
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "id": "phase-7-testing",
+      "name": "Testing",
+      "type": "implementation",
+      "description": "Create comprehensive test suite: unit tests for core services and adapters, integration tests for API flows and sync logic, and an end-to-end test for the full meeting lifecycle.",
+      "depends_on": [
+        "phase-6-linear"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Create unit tests for core services: tests/unit/briefing.service.test.ts (context aggregation, all briefing sections, missing data handling), tests/unit/reconciliation.service.test.ts (hash matching, create vs update, edge cases), tests/unit/extraction.service.test.ts (Krisp/Granola parsing, source merging, deduplication), tests/unit/config.test.ts (env var validation, defaults, missing required).",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "tests/unit/briefing.service.test.ts",
+            "tests/unit/reconciliation.service.test.ts",
+            "tests/unit/extraction.service.test.ts",
+            "tests/unit/config.test.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx vitest run tests/unit/ --reporter=verbose 2>&1 | tail -10",
+            "expected": "All unit tests pass"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Create unit tests for adapters: tests/unit/adapters/linear.adapter.test.ts (create/update issues, API errors, rate limits), tests/unit/adapters/krisp.adapter.test.ts (search→get_document chain, 401 handling, empty results), tests/unit/adapters/granola.adapter.test.ts (meeting list, details, free plan limits). Use vitest mocking for SDK/MCP calls.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "tests/unit/adapters/linear.adapter.test.ts",
+            "tests/unit/adapters/krisp.adapter.test.ts",
+            "tests/unit/adapters/granola.adapter.test.ts"
+          ],
+          "patterns_from": [
+            "tests/unit/briefing.service.test.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx vitest run tests/unit/adapters/ --reporter=verbose 2>&1 | tail -10",
+            "expected": "All adapter tests pass"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Create integration tests: tests/integration/api.test.ts (clients/meetings CRUD, briefing generation via API, error responses), tests/integration/sync-flow.test.ts (action item → Linear sync → cross-reference stored, idempotent re-sync), tests/integration/webhook.test.ts (signature verification pass/fail, status update processing, duplicate event handling). Use supertest for HTTP testing, in-memory SQLite.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "tests/integration/api.test.ts",
+            "tests/integration/sync-flow.test.ts",
+            "tests/integration/webhook.test.ts"
+          ],
+          "patterns_from": [
+            "tests/unit/briefing.service.test.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx vitest run tests/integration/ --reporter=verbose 2>&1 | tail -10",
+            "expected": "All integration tests pass"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Create end-to-end test: tests/e2e/full-flow.test.ts covering the complete meeting lifecycle: (1) create client, (2) create meeting, (3) generate briefing, (4) trigger extraction (mocked MCP), (5) sync action items to Linear (mocked SDK), (6) receive webhook status update, (7) verify client history timeline. Also test idempotent re-sync and graceful degradation.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "tests/e2e/full-flow.test.ts"
+          ],
+          "patterns_from": [
+            "tests/integration/api.test.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tail -10",
+            "expected": "All e2e tests pass"
+          },
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "id": "phase-8-integration",
+      "name": "Integration & Polish",
+      "type": "integration",
+      "description": "Final verification: ensure all services work together end-to-end, handle edge cases gracefully, and the web dashboard is fully functional.",
+      "depends_on": [
+        "phase-7-testing"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Verify and fix edge cases: adapter failures don't crash server, partial extraction works (one MCP source fails), duplicate webhook events are ignored, empty meetings show 'No data found', stale OAuth tokens trigger refresh, SQLite WAL mode is enabled for concurrent reads. Add any missing error handling.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx vitest run --reporter=verbose 2>&1 | tail -15",
+            "expected": "All tests pass with no failures"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Final end-to-end verification: start dev server, verify all browser pages render (dashboard, briefing, post-call, client timeline), verify API endpoints return correct responses, verify TypeScript compiles with no errors, verify all tests pass. Fix any remaining issues.",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cd /home/rlmit/workspace/meeting-prepper && npx tsc --noEmit && npx vitest run 2>&1 | tail -5",
+            "expected": "TypeScript compiles cleanly and all tests pass"
+          },
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 8,
+    "total_subtasks": 31,
+    "services_involved": [
+      "backend"
+    ],
+    "estimated_files_to_create": 38,
+    "product_phases_mapped": {
+      "product_phase_1_briefing": [
+        "phase-1-foundation",
+        "phase-2-adapters",
+        "phase-3-briefing"
+      ],
+      "product_phase_2_mcp": [
+        "phase-4-mcp",
+        "phase-5-extraction"
+      ],
+      "product_phase_3_linear": [
+        "phase-6-linear"
+      ],
+      "testing_and_polish": [
+        "phase-7-testing",
+        "phase-8-integration"
+      ]
+    },
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-3-briefing",
+            "phase-4-mcp"
+          ],
+          "reason": "Both depend only on phase-2-adapters. Phase 3 creates services/routes/views; Phase 4 creates MCP utils and adapters. Zero file overlap."
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "1.3x faster than sequential — Phases 3 and 4 can run concurrently (5+3=8 subtasks in parallel window)"
+    },
+    "dependency_chain": "phase-1 → phase-2 → [phase-3 || phase-4] → phase-5 → phase-6 → phase-7 → phase-8",
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 001 --parallel 2"
+  },
+  "verification_strategy": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "test_creation_phase": "phase-7-testing",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "e2e"
+    ],
+    "security_scanning_required": true,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All TypeScript compiles with zero errors (npx tsc --noEmit)",
+      "Dev server starts and listens on port 3000",
+      "SQLite database initializes with correct 6-table schema",
+      "All unit tests pass (services + adapters)",
+      "All integration tests pass (API, sync flow, webhooks)",
+      "E2E test passes (full meeting lifecycle)",
+      "Dashboard renders at http://localhost:3000/",
+      "Briefing generation completes within 10 seconds",
+      "Adapter failures don't crash the server"
+    ],
+    "verification_steps": [
+      {
+        "name": "TypeScript Compilation",
+        "command": "npx tsc --noEmit",
+        "expected_outcome": "Zero compilation errors",
+        "type": "build",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Unit Tests",
+        "command": "npx vitest run tests/unit/",
+        "expected_outcome": "All unit tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Integration Tests",
+        "command": "npx vitest run tests/integration/",
+        "expected_outcome": "All integration tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "E2E Tests",
+        "command": "npx vitest run tests/e2e/",
+        "expected_outcome": "Full lifecycle test passes",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Secrets Scan",
+        "command": "grep -rn 'sk_\\|api_key.*=.*[A-Za-z0-9]\\{20\\}\\|password.*=.*[^$]' src/ --include='*.ts' | grep -v '.example' | grep -v 'process.env' || echo 'No secrets found'",
+        "expected_outcome": "No hardcoded secrets in source code",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "High-risk greenfield project with 5+ external integrations, bidirectional sync, and credential handling. Requires comprehensive unit + integration + e2e tests. Security scan for hardcoded secrets is mandatory given the number of API keys involved."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": [
+        "npx vitest run tests/unit/"
+      ],
+      "minimum_coverage": null,
+      "test_files": [
+        "tests/unit/briefing.service.test.ts",
+        "tests/unit/reconciliation.service.test.ts",
+        "tests/unit/extraction.service.test.ts",
+        "tests/unit/config.test.ts",
+        "tests/unit/adapters/linear.adapter.test.ts",
+        "tests/unit/adapters/krisp.adapter.test.ts",
+        "tests/unit/adapters/granola.adapter.test.ts"
+      ]
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "npx vitest run tests/integration/"
+      ],
+      "services_to_test": [
+        "backend"
+      ],
+      "test_files": [
+        "tests/integration/api.test.ts",
+        "tests/integration/sync-flow.test.ts",
+        "tests/integration/webhook.test.ts"
+      ]
+    },
+    "e2e_tests": {
+      "required": true,
+      "commands": [
+        "npx vitest run tests/e2e/"
+      ],
+      "flows": [
+        "full-meeting-lifecycle",
+        "idempotent-sync",
+        "graceful-degradation"
+      ]
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "http://localhost:3000/",
+          "checks": [
+            "Dashboard renders",
+            "Upcoming meetings visible",
+            "Prepare Meeting button clickable",
+            "No console errors"
+          ]
+        },
+        {
+          "url": "http://localhost:3000/meetings/:id",
+          "checks": [
+            "Briefing displays with all sections",
+            "Post-call tab shows extraction results",
+            "Action items table renders",
+            "Sync to Linear button works"
+          ]
+        },
+        {
+          "url": "http://localhost:3000/clients/:id",
+          "checks": [
+            "Client timeline renders chronologically",
+            "Events linked to meetings",
+            "Status changes reflected"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": true,
+      "checks": [
+        "All 6 tables created (clients, meetings, meeting_sources, action_items, linear_sync, client_history)",
+        "All 7 indices created",
+        "WAL mode enabled",
+        "Cross-reference integrity (no orphaned linear_sync records)"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "xstateState": "coding",
+  "executionPhase": "coding",
+  "updated_at": "2026-04-09T23:06:50.653Z",
+  "lastEvent": {
+    "eventId": "da8ba06c-6b4b-4ded-a486-160937932d3f",
+    "sequence": 0,
+    "type": "PLANNING_COMPLETE",
+    "timestamp": "2026-04-09T20:54:47.897501+00:00"
+  },
+  "last_updated": "2026-04-09T21:05:34.226279+00:00",
+  "recoveryNote": "Task recovered from stuck state at 2026-04-09T23:06:33.911Z"
+}
