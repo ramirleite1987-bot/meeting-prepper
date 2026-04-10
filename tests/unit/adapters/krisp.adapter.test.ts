@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { KrispAdapter } from '../../../src/adapters/krisp.adapter.js';
 
-// Mock MCP client
-const mockCallTool = vi.fn();
-const mockClose = vi.fn();
+// Mock MCP client - use vi.hoisted so variables are available in hoisted vi.mock factories
+const { mockCallTool, mockClose } = vi.hoisted(() => ({
+  mockCallTool: vi.fn(),
+  mockClose: vi.fn(),
+}));
 
 vi.mock('../../../src/utils/mcp-client.js', () => ({
   createMCPClient: vi.fn().mockResolvedValue({

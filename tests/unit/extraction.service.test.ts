@@ -7,6 +7,7 @@ vi.mock('../../src/db/index.js', () => ({
   getDb: () => ({
     transaction: (fn: Function) => fn,
     prepare: () => ({ run: vi.fn(), get: vi.fn() }),
+    exec: vi.fn(),
   }),
   queries: {
     insertMeetingSource: () => ({ run: vi.fn() }),
@@ -26,6 +27,15 @@ vi.mock('../../src/utils/logger.js', () => ({
       error: vi.fn(),
     }),
     info: vi.fn(),
+  },
+}));
+
+// Mock the config
+vi.mock('../../src/config.js', () => ({
+  config: {
+    logLevel: 'error',
+    krispMcpServerUrl: undefined,
+    granolaMcpServerUrl: undefined,
   },
 }));
 

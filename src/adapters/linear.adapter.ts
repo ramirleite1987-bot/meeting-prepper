@@ -159,7 +159,7 @@ export class LinearAdapter implements ITaskAdapter {
   // Helpers
   // ──────────────────────────────────────────────
 
-  private ensureClient(): asserts this is this & { client: LinearClient } {
+  private ensureClient(): void {
     if (!this.client) {
       throw new Error('LinearAdapter not initialized. Call initialize() first.');
     }

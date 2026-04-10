@@ -117,6 +117,15 @@ vi.mock('../../src/config.js', () => ({
   },
 }));
 
+// Mock notification service
+vi.mock('../../src/services/notification.service.js', () => ({
+  notificationService: {
+    notify: vi.fn().mockResolvedValue(undefined),
+    getRecentNotifications: vi.fn().mockReturnValue([]),
+    subscribe: vi.fn().mockReturnValue(() => {}),
+  },
+}));
+
 // Mock external services with spies we can inspect
 const mockGetClientContext = vi.fn().mockResolvedValue([
   {
@@ -319,10 +328,12 @@ describe('E2E Full Meeting Lifecycle', () => {
 
     // Webhook processes asynchronously via setImmediate; wait for it
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(mockHandleLinearUpdate).toHaveBeenCalledWith({
-      linearIssueId: 'LIN-42',
-      status: 'In Progress',
-    });
+    expect(mockHandleLinearUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        linearIssueId: 'LIN-42',
+        status: 'in-progress',
+      }),
+    );
 
     // Step 7: Verify client history timeline
     // Seed history entries that would be created by the services
@@ -486,9 +497,11 @@ describe('E2E Full Meeting Lifecycle', () => {
       .expect(200);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(mockHandleLinearUpdate).toHaveBeenCalledWith({
-      linearIssueId: 'LIN-99',
-      status: 'Unknown',
-    });
+    expect(mockHandleLinearUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        linearIssueId: 'LIN-99',
+        status: 'todo',
+      }),
+    );
   });
 });

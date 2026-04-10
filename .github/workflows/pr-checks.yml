@@ -1,0 +1,62 @@
+name: PR Review & Notifications
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr-summary:
+    name: PR Change Summary
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Change Summary
+        run: |
+          echo "## PR Change Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # File change stats
+          echo "### Files Changed" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          git diff --stat origin/${{ github.base_ref }}...HEAD >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for sensitive files
+          SENSITIVE=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(env|key|pem|secret)' || true)
+          if [ -n "$SENSITIVE" ]; then
+            echo "### Warning: Sensitive Files Detected" >> $GITHUB_STEP_SUMMARY
+            echo "$SENSITIVE" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for schema changes
+          SCHEMA=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E 'schema\.sql|migration' || true)
+          if [ -n "$SCHEMA" ]; then
+            echo "### Database Schema Changes" >> $GITHUB_STEP_SUMMARY
+            echo "Review schema changes carefully before merging." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  dependency-check:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Check for vulnerabilities
+        run: npm audit --audit-level=high || true
+        continue-on-error: true

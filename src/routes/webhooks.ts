@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { webhookVerify } from '../middleware/webhook-verify.js';
 import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
+import { notificationService } from '../services/notification.service.js';
 import type { TaskStatus } from '../adapters/types.js';
 
 const router = Router();
@@ -45,17 +46,34 @@ router.post('/linear', webhookVerify, (req: Request, res: Response) => {
 
     const statusName = payload.data.state?.name ?? 'Todo';
 
+    const mappedStatus = mapLinearStatus(statusName);
+
     syncService
       .handleLinearUpdate({
         linearIssueId: payload.data.id,
-        status: mapLinearStatus(statusName),
+        status: mappedStatus,
         updatedAt: payload.updatedAt ?? new Date().toISOString(),
       })
+      .then(() => {
+        notificationService.notify(
+          'linear_status_change',
+          `Linear issue status changed to ${statusName}`,
+          `Issue ${payload.data.id} moved to ${mappedStatus}`,
+          { linearIssueId: payload.data.id, status: mappedStatus },
+        ).catch(() => { /* notification is best-effort */ });
+      })
       .catch((err: unknown) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
         logger.error('Error processing Linear webhook', {
           issueId: payload.data.id,
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMsg,
         });
+        notificationService.notify(
+          'sync_error',
+          'Linear webhook processing failed',
+          errorMsg,
+          { linearIssueId: payload.data.id },
+        ).catch(() => { /* notification is best-effort */ });
       });
   });
 });

@@ -4,7 +4,7 @@
  * merges summaries, deduplicates action items, and stores results.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { KrispAdapter } from '../adapters/krisp.adapter.js';
 import { GranolaAdapter } from '../adapters/granola.adapter.js';
 import type { IMeetingAdapter, MeetingNotes, ActionItem } from '../adapters/types.js';
@@ -278,7 +278,7 @@ export class ExtractionService {
    */
   private isSameOwner(a?: string, b?: string): boolean {
     if (!a && !b) return true;
-    if (!a || !b) return true; // Treat missing owner as wildcard match
+    if (!a || !b) return false;
     return a.toLowerCase().trim() === b.toLowerCase().trim();
   }
 
@@ -287,14 +287,7 @@ export class ExtractionService {
    */
   private generateContextHash(item: ActionItem, meetingId: string): string {
     const key = `${meetingId}:${item.title.toLowerCase().trim()}:${(item.assignee ?? '').toLowerCase().trim()}`;
-    // Simple hash using string char codes
-    let hash = 0;
-    for (let i = 0; i < key.length; i++) {
-      const char = key.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash |= 0;
-    }
-    return Math.abs(hash).toString(36);
+    return createHash('sha256').update(key).digest('hex');
   }
 
   /**
@@ -381,6 +374,7 @@ export class ExtractionService {
         meetingId: extraction.meetingId,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   }
 }

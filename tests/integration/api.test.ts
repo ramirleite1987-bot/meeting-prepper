@@ -118,6 +118,15 @@ vi.mock('../../src/config.js', () => ({
   },
 }));
 
+// Mock notification service
+vi.mock('../../src/services/notification.service.js', () => ({
+  notificationService: {
+    notify: vi.fn().mockResolvedValue(undefined),
+    getRecentNotifications: vi.fn().mockReturnValue([]),
+    subscribe: vi.fn().mockReturnValue(() => {}),
+  },
+}));
+
 // Mock external services used by routes
 vi.mock('../../src/services/client-context.service.js', () => ({
   ClientContextService: vi.fn().mockImplementation(() => ({

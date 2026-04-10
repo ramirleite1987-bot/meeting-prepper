@@ -5,7 +5,7 @@
  * Falls back to Granola REST API (public-api.granola.ai) when GRANOLA_API_KEY is set.
  */
 
-import { Client } from '@modelcontextprotocol/client';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMCPClient } from '../utils/mcp-client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
