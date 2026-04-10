@@ -4,7 +4,7 @@
  * Chains: search_meetings → extract document ID → get_document → list_action_items.
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMCPClient } from '../utils/mcp-client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';

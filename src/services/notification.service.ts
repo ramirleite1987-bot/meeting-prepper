@@ -5,7 +5,6 @@
  */
 
 import { logger } from '../utils/logger.js';
-import { config } from '../config.js';
 
 const log = logger.child('NotificationService');
 

@@ -6,7 +6,7 @@ import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
 import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
-import { AppError } from '../middleware/error-handler.js';
+import type { AppError } from '../middleware/error-handler.js';
 import { notificationService } from '../services/notification.service.js';
 
 const router = Router();

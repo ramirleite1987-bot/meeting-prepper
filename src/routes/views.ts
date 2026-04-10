@@ -62,7 +62,7 @@ function renderSimpleTemplate(template: string, data: Record<string, unknown>): 
   // Handle {{key}} simple replacements
   result = result.replace(/\{\{([\w.]+)\}\}/g, (_match, key: string) => {
     const val = resolveValue(data, key);
-    return val != null ? escapeHtml(String(val)) : '';
+    return val !== null && val !== undefined ? escapeHtml(String(val)) : '';
   });
 
   return result;

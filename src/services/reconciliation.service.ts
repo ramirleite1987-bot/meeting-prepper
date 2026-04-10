@@ -115,7 +115,6 @@ export class ReconciliationService {
    * Called on every task create to enable future reconciliation.
    */
   storeCrossReference(ref: CrossReference, actionItemId?: string): void {
-    const db = getDb();
     const id = randomUUID();
 
     try {
