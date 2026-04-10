@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database, { type Statement } from 'better-sqlite3';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -47,7 +47,7 @@ export function closeDb(): void {
 }
 
 // Prepared statement helpers for common queries
-export const queries = {
+export const queries: Record<string, () => Statement> = {
   // Clients
   getClientById: () => getDb().prepare('SELECT * FROM clients WHERE id = ?'),
   getAllClients: () => getDb().prepare('SELECT * FROM clients ORDER BY updated_at DESC'),

@@ -1,5 +1,5 @@
-import { Client } from '@modelcontextprotocol/client';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client/streamableHttp';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { logger } from './logger.js';
 import { tokenManager } from './token-manager.js';
 

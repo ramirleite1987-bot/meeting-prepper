@@ -11,7 +11,6 @@ import { getDb, queries } from '../db/index.js';
 import {
   ReconciliationService,
   buildReconciliationKey,
-  buildContextHash,
 } from './reconciliation.service.js';
 import { logger } from '../utils/logger.js';
 
@@ -82,7 +81,6 @@ export class SyncService {
     }
 
     const title = actionItem.title as string;
-    const contextHash = (actionItem.context_hash as string) ?? buildContextHash(title);
 
     // Check for existing task via reconciliation
     const key = buildReconciliationKey(meetingId, title, title);

@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GranolaAdapter } from '../../../src/adapters/granola.adapter.js';
 
-// Mock MCP client
-const mockCallTool = vi.fn();
-const mockClose = vi.fn();
+// Mock MCP client - use vi.hoisted so variables are available in hoisted vi.mock factories
+const { mockCallTool, mockClose } = vi.hoisted(() => ({
+  mockCallTool: vi.fn(),
+  mockClose: vi.fn(),
+}));
 
 vi.mock('../../../src/utils/mcp-client.js', () => ({
   createMCPClient: vi.fn().mockResolvedValue({
@@ -206,15 +208,16 @@ describe('GranolaAdapter', () => {
 
   describe('REST API fallback', () => {
     let restAdapter: GranolaAdapter;
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
       restAdapter = new GranolaAdapter(undefined, 'test-api-key');
       // Don't initialize MCP - it will use REST
-      vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn());
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(vi.fn());
     });
 
     afterEach(() => {
-      vi.restoreAllMocks();
+      fetchSpy.mockRestore();
     });
 
     it('should search meetings via REST', async () => {

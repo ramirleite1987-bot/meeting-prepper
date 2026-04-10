@@ -4,7 +4,7 @@
  * a unified context timeline for a given client.
  */
 
-import { IContextAdapter, ContextEntry } from '../adapters/types.js';
+import type { IContextAdapter, ContextEntry } from '../adapters/types.js';
 import { queries } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 

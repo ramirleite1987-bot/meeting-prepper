@@ -17,6 +17,20 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Request logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    logger.info('HTTP request', {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+    });
+  });
+  next();
+});
+
 // CORS for development
 if (config.nodeEnv === 'development') {
   app.use((_req, res, next) => {
@@ -36,7 +50,13 @@ app.use(express.static(join(__dirname, '..', 'public')));
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  try {
+    const db = getDb();
+    db.prepare('SELECT 1').get();
+    res.json({ status: 'ok', database: 'connected' });
+  } catch {
+    res.status(503).json({ status: 'error', database: 'disconnected' });
+  }
 });
 
 // Webhook routes

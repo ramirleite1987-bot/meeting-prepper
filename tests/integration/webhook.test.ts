@@ -89,6 +89,15 @@ vi.mock('../../src/config.js', () => ({
   },
 }));
 
+// Mock notification service
+vi.mock('../../src/services/notification.service.js', () => ({
+  notificationService: {
+    notify: vi.fn().mockResolvedValue(undefined),
+    getRecentNotifications: vi.fn().mockReturnValue([]),
+    subscribe: vi.fn().mockReturnValue(() => {}),
+  },
+}));
+
 // Mock Linear adapter
 vi.mock('../../src/adapters/linear.adapter.js', () => ({
   LinearAdapter: vi.fn().mockImplementation(() => ({

@@ -8,10 +8,10 @@ CREATE TABLE IF NOT EXISTS clients (
 
 CREATE TABLE IF NOT EXISTS meetings (
   id TEXT PRIMARY KEY,
-  client_id TEXT NOT NULL REFERENCES clients(id),
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   scheduled_at DATETIME,
-  status TEXT DEFAULT 'upcoming', -- upcoming, in_progress, completed
+  status TEXT DEFAULT 'scheduled', -- scheduled, in_progress, completed
   briefing TEXT, -- JSON
   post_call_notes TEXT, -- JSON
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS meetings (
 
 CREATE TABLE IF NOT EXISTS meeting_sources (
   id TEXT PRIMARY KEY,
-  meeting_id TEXT NOT NULL REFERENCES meetings(id),
+  meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
   source TEXT NOT NULL, -- 'krisp', 'granola', 'manual'
   external_id TEXT, -- ID in the source system
   summary TEXT,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS meeting_sources (
 
 CREATE TABLE IF NOT EXISTS action_items (
   id TEXT PRIMARY KEY,
-  meeting_id TEXT NOT NULL REFERENCES meetings(id),
+  meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
   source TEXT NOT NULL, -- 'krisp', 'granola', 'manual'
   title TEXT NOT NULL,
   description TEXT,
@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS action_items (
 
 CREATE TABLE IF NOT EXISTS linear_sync (
   id TEXT PRIMARY KEY,
-  action_item_id TEXT NOT NULL REFERENCES action_items(id),
-  meeting_id TEXT NOT NULL REFERENCES meetings(id),
+  action_item_id TEXT REFERENCES action_items(id) ON DELETE SET NULL,
+  meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
   linear_issue_id TEXT NOT NULL,
   source TEXT NOT NULL, -- 'krisp', 'granola', 'manual'
   sync_status TEXT DEFAULT 'created', -- created, updated, closed
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS linear_sync (
 
 CREATE TABLE IF NOT EXISTS client_history (
   id TEXT PRIMARY KEY,
-  client_id TEXT NOT NULL REFERENCES clients(id),
-  meeting_id TEXT REFERENCES meetings(id),
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL,
   event_type TEXT NOT NULL, -- 'meeting', 'task_created', 'task_updated', 'status_change'
   event_data TEXT NOT NULL, -- JSON
   occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -73,3 +73,6 @@ CREATE INDEX IF NOT EXISTS idx_action_items_hash ON action_items(context_hash);
 CREATE INDEX IF NOT EXISTS idx_linear_sync_issue ON linear_sync(linear_issue_id);
 CREATE INDEX IF NOT EXISTS idx_linear_sync_meeting ON linear_sync(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_client_history_client ON client_history(client_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_scheduled ON meetings(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_action_items_deadline ON action_items(deadline);
+CREATE INDEX IF NOT EXISTS idx_action_items_status ON action_items(status);

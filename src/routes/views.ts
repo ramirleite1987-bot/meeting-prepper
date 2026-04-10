@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,8 +11,19 @@ const viewsDir = join(__dirname, '..', 'views');
 
 const router = Router();
 
+function param(req: Request, name: string): string {
+  const val = req.params[name];
+  return Array.isArray(val) ? val[0] : val;
+}
+
+const templateCache = new Map<string, string>();
+
 function loadTemplate(name: string): string {
-  return readFileSync(join(viewsDir, `${name}.html`), 'utf-8');
+  const cached = templateCache.get(name);
+  if (cached) return cached;
+  const content = readFileSync(join(viewsDir, `${name}.html`), 'utf-8');
+  templateCache.set(name, content);
+  return content;
 }
 
 function renderLayout(title: string, content: string): string {
@@ -51,7 +62,7 @@ function renderSimpleTemplate(template: string, data: Record<string, unknown>): 
   // Handle {{key}} simple replacements
   result = result.replace(/\{\{([\w.]+)\}\}/g, (_match, key: string) => {
     const val = resolveValue(data, key);
-    return val != null ? escapeHtml(String(val)) : '';
+    return val !== null && val !== undefined ? escapeHtml(String(val)) : '';
   });
 
   return result;
@@ -104,7 +115,7 @@ router.get('/', (_req: Request, res: Response, next: NextFunction) => {
 
 router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const meeting = queries.getMeetingById().get(req.params.id) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as Record<string, unknown> | undefined;
     if (!meeting) {
       res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
@@ -112,7 +123,7 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
 
     let briefing = null;
     if (meeting.briefing) {
-      briefing = JSON.parse(meeting.briefing as string);
+      try { briefing = JSON.parse(meeting.briefing as string); } catch { /* corrupted data */ }
     }
 
     const template = loadTemplate('briefing');
@@ -131,7 +142,7 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
 
 router.post('/briefing/:id/prepare', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const meeting = queries.getMeetingById().get(req.params.id) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as Record<string, unknown> | undefined;
     if (!meeting) {
       res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
@@ -145,10 +156,10 @@ router.post('/briefing/:id/prepare', async (req: Request, res: Response, next: N
 
     const clientName = client.name as string;
     const context = await clientContextService.getClientContext(clientName);
-    await briefingService.generateBriefing(req.params.id, clientName, context);
+    await briefingService.generateBriefing(param(req, 'id'), clientName, context);
 
-    logger.info('Briefing generated via web', { meetingId: req.params.id });
-    res.redirect(`/briefing/${req.params.id}`);
+    logger.info('Briefing generated via web', { meetingId: param(req, 'id') });
+    res.redirect(`/briefing/${param(req, 'id')}`);
   } catch (err) {
     next(err);
   }
@@ -191,16 +202,16 @@ router.post('/briefing/prepare', async (req: Request, res: Response, next: NextF
 
 router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const client = queries.getClientById().get(req.params.id) as Record<string, unknown> | undefined;
+    const client = queries.getClientById().get(param(req, 'id')) as Record<string, unknown> | undefined;
     if (!client) {
       res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Client not found.</p>'));
       return;
     }
 
-    const timeline = clientContextService.getClientTimeline(req.params.id);
-    const events = timeline.map((evt: Record<string, unknown>) => {
+    const timeline = clientContextService.getClientTimeline(param(req, 'id'));
+    const events = timeline.map((evt) => {
       let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(evt.event_data as string); } catch { /* skip */ }
+      try { parsed = JSON.parse(evt.event_data); } catch { /* skip */ }
       return {
         ...evt,
         parsed_title: parsed.title || parsed.name || evt.event_type,
@@ -229,7 +240,7 @@ router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => 
 
 router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const meeting = queries.getMeetingById().get(req.params.id) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as Record<string, unknown> | undefined;
     if (!meeting) {
       res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
@@ -237,12 +248,12 @@ router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) =
 
     let postCall = null;
     if (meeting.post_call_notes) {
-      postCall = JSON.parse(meeting.post_call_notes as string);
+      try { postCall = JSON.parse(meeting.post_call_notes as string); } catch { /* corrupted data */ }
     }
 
     // Also gather consolidated data from meeting_sources
     if (!postCall) {
-      const sources = queries.getMeetingSourcesByMeeting().all(req.params.id) as Record<string, unknown>[];
+      const sources = queries.getMeetingSourcesByMeeting().all(param(req, 'id')) as Record<string, unknown>[];
       if (sources.length > 0) {
         const summaries: string[] = [];
         const decisions: string[] = [];
@@ -266,7 +277,7 @@ router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) =
       }
     }
 
-    const actionItems = (queries.getActionItemsByMeeting().all(req.params.id) as Record<string, unknown>[]).map(item => ({
+    const actionItems = (queries.getActionItemsByMeeting().all(param(req, 'id')) as Record<string, unknown>[]).map(item => ({
       ...item,
       priorityClass: item.priority === 'high' ? 'bg-red-100 text-red-800' :
                      item.priority === 'low' ? 'bg-green-100 text-green-800' :
