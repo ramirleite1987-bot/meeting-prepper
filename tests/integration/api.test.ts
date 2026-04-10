@@ -1,0 +1,407 @@
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import request from 'supertest';
+import express from 'express';
+import Database from 'better-sqlite3';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Create in-memory database and mock before importing app modules
+let testDb: Database.Database;
+
+function createTestDb(): Database.Database {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  const schemaPath = join(__dirname, '..', '..', 'src', 'db', 'schema.sql');
+  const schema = readFileSync(schemaPath, 'utf-8');
+  db.exec(schema);
+  return db;
+}
+
+// Mock the database module
+vi.mock('../../src/db/index.js', () => {
+  // Lazy references to testDb (set in beforeEach)
+  const getDb = () => testDb;
+
+  const queries = {
+    getAllClients: () => testDb.prepare('SELECT * FROM clients ORDER BY updated_at DESC'),
+    getClientById: () => testDb.prepare('SELECT * FROM clients WHERE id = ?'),
+    insertClient: () =>
+      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (@id, @name, @project)'),
+    updateClient: () =>
+      testDb.prepare(
+        'UPDATE clients SET name = @name, project = @project, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
+      ),
+    getMeetingById: () => testDb.prepare('SELECT * FROM meetings WHERE id = ?'),
+    getMeetingsByClient: () =>
+      testDb.prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
+    getMeetingsByStatus: () =>
+      testDb.prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
+    insertMeeting: () =>
+      testDb.prepare(
+        'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',
+      ),
+    updateMeetingBriefing: () =>
+      testDb.prepare(
+        "UPDATE meetings SET briefing = @briefing, updated_at = CURRENT_TIMESTAMP WHERE id = @id",
+      ),
+    updateMeetingPostCall: () =>
+      testDb.prepare(
+        "UPDATE meetings SET post_call_notes = @postCallNotes, status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = @id",
+      ),
+    insertMeetingSource: () =>
+      testDb.prepare(
+        'INSERT INTO meeting_sources (id, meeting_id, source, external_id, summary, decisions, risks, raw_data) VALUES (@id, @meetingId, @source, @externalId, @summary, @decisions, @risks, @rawData)',
+      ),
+    getMeetingSourcesByMeeting: () =>
+      testDb.prepare('SELECT * FROM meeting_sources WHERE meeting_id = ?'),
+    insertActionItem: () =>
+      testDb.prepare(
+        'INSERT INTO action_items (id, meeting_id, source, title, description, owner, deadline, priority, context_hash) VALUES (@id, @meetingId, @source, @title, @description, @owner, @deadline, @priority, @contextHash)',
+      ),
+    getActionItemsByMeeting: () =>
+      testDb.prepare('SELECT * FROM action_items WHERE meeting_id = ? ORDER BY created_at ASC'),
+    getActionItemByHash: () => testDb.prepare('SELECT * FROM action_items WHERE context_hash = ?'),
+    updateActionItemStatus: () =>
+      testDb.prepare(
+        'UPDATE action_items SET status = @status, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
+      ),
+    insertLinearSync: () =>
+      testDb.prepare(
+        'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (@id, @actionItemId, @meetingId, @linearIssueId, @source, @syncStatus)',
+      ),
+    getLinearSyncByIssue: () =>
+      testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
+    getLinearSyncByMeeting: () =>
+      testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    updateLinearSyncStatus: () =>
+      testDb.prepare(
+        'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
+      ),
+    insertClientHistory: () =>
+      testDb.prepare(
+        'INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (@id, @clientId, @meetingId, @eventType, @eventData)',
+      ),
+    getClientHistory: () =>
+      testDb.prepare('SELECT * FROM client_history WHERE client_id = ? ORDER BY occurred_at DESC'),
+  };
+
+  return { getDb, closeDb: vi.fn(), queries };
+});
+
+// Mock the logger
+vi.mock('../../src/utils/logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: () => ({
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    }),
+  },
+}));
+
+// Mock config
+vi.mock('../../src/config.js', () => ({
+  config: {
+    port: 3000,
+    nodeEnv: 'test',
+    databasePath: ':memory:',
+    logLevel: 'error',
+    linearWebhookSecret: 'test-secret',
+  },
+}));
+
+// Mock external services used by routes
+vi.mock('../../src/services/client-context.service.js', () => ({
+  ClientContextService: vi.fn().mockImplementation(() => ({
+    getClientContext: vi.fn().mockResolvedValue([
+      {
+        source: 'test',
+        type: 'commit',
+        title: 'feat: shipped v2',
+        content: 'New feature release',
+        timestamp: new Date(),
+      },
+    ]),
+  })),
+}));
+
+vi.mock('../../src/services/extraction.service.js', () => ({
+  ExtractionService: vi.fn().mockImplementation(() => ({
+    extract: vi.fn().mockResolvedValue({
+      sources: [{ source: 'krisp', summary: 'Test meeting notes' }],
+      actionItems: [],
+      summary: 'Test summary',
+    }),
+  })),
+}));
+
+vi.mock('../../src/services/sync.service.js', () => ({
+  SyncService: vi.fn().mockImplementation(() => ({
+    syncActionItem: vi.fn().mockResolvedValue({
+      actionItemId: 'item-1',
+      linearIssueId: 'LIN-1',
+      status: 'created',
+      taskReference: { id: 'LIN-1', title: 'Test', status: 'todo' },
+    }),
+    syncAllActionItems: vi.fn().mockResolvedValue({
+      meetingId: 'meeting-1',
+      results: [],
+      errors: [],
+    }),
+    handleLinearUpdate: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+// Import after mocks
+const { apiRouter } = await import('../../src/routes/api.js');
+const { errorHandler } = await import('../../src/middleware/error-handler.js');
+
+function createApp(): express.Express {
+  const app = express();
+  app.use(express.json());
+  app.use('/api', apiRouter);
+  app.use(errorHandler);
+  return app;
+}
+
+describe('API Integration Tests', () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    testDb = createTestDb();
+    app = createApp();
+  });
+
+  // ──────────────────────────────────────────────
+  // Clients CRUD
+  // ──────────────────────────────────────────────
+
+  describe('Clients', () => {
+    it('POST /api/clients creates a new client', async () => {
+      const res = await request(app)
+        .post('/api/clients')
+        .send({ name: 'Acme Corp', project: 'Project X' })
+        .expect(201);
+
+      expect(res.body.name).toBe('Acme Corp');
+      expect(res.body.project).toBe('Project X');
+      expect(res.body.id).toBeDefined();
+    });
+
+    it('POST /api/clients returns 400 when name is missing', async () => {
+      const res = await request(app)
+        .post('/api/clients')
+        .send({ project: 'No Name' })
+        .expect(400);
+
+      expect(res.body.error).toMatch(/name is required/i);
+    });
+
+    it('GET /api/clients returns all clients', async () => {
+      // Seed
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Client A');
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c2', 'Client B');
+
+      const res = await request(app).get('/api/clients').expect(200);
+
+      expect(res.body).toHaveLength(2);
+    });
+
+    it('GET /api/clients/:id returns a single client', async () => {
+      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)').run(
+        'c1',
+        'Acme',
+        'Proj',
+      );
+
+      const res = await request(app).get('/api/clients/c1').expect(200);
+
+      expect(res.body.name).toBe('Acme');
+      expect(res.body.project).toBe('Proj');
+    });
+
+    it('GET /api/clients/:id returns 404 for missing client', async () => {
+      const res = await request(app).get('/api/clients/nonexistent').expect(404);
+
+      expect(res.body.error).toMatch(/not found/i);
+    });
+
+    it('GET /api/clients/:id/timeline returns client history', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare(
+          "INSERT INTO client_history (id, client_id, event_type, event_data) VALUES (?, ?, ?, ?)",
+        )
+        .run('h1', 'c1', 'meeting', '{"note":"test"}');
+
+      const res = await request(app).get('/api/clients/c1/timeline').expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].event_type).toBe('meeting');
+    });
+
+    it('GET /api/clients/:id/timeline returns 404 for missing client', async () => {
+      await request(app).get('/api/clients/nonexistent/timeline').expect(404);
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Meetings CRUD
+  // ──────────────────────────────────────────────
+
+  describe('Meetings', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+    });
+
+    it('POST /api/meetings creates a meeting', async () => {
+      const res = await request(app)
+        .post('/api/meetings')
+        .send({ clientId: 'c1', title: 'Weekly Sync' })
+        .expect(201);
+
+      expect(res.body.title).toBe('Weekly Sync');
+      expect(res.body.client_id).toBe('c1');
+      expect(res.body.status).toBe('scheduled');
+    });
+
+    it('POST /api/meetings returns 400 without required fields', async () => {
+      await request(app).post('/api/meetings').send({ title: 'No client' }).expect(400);
+    });
+
+    it('POST /api/meetings returns 404 for invalid clientId', async () => {
+      const res = await request(app)
+        .post('/api/meetings')
+        .send({ clientId: 'nonexistent', title: 'Test' })
+        .expect(404);
+
+      expect(res.body.error).toMatch(/Client not found/i);
+    });
+
+    it('GET /api/meetings/:id returns a meeting', async () => {
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m1', 'c1', 'Sync', '2024-01-01', 'scheduled');
+
+      const res = await request(app).get('/api/meetings/m1').expect(200);
+
+      expect(res.body.title).toBe('Sync');
+    });
+
+    it('GET /api/meetings/:id returns 404 for missing meeting', async () => {
+      await request(app).get('/api/meetings/nonexistent').expect(404);
+    });
+
+    it('GET /api/meetings filters by status', async () => {
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m1', 'c1', 'Sync 1', '2024-01-01', 'scheduled');
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m2', 'c1', 'Sync 2', '2024-01-02', 'completed');
+
+      const res = await request(app).get('/api/meetings?status=completed').expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].title).toBe('Sync 2');
+    });
+
+    it('GET /api/meetings filters by clientId', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c2', 'Other');
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m1', 'c1', 'Acme Sync', '2024-01-01', 'scheduled');
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m2', 'c2', 'Other Sync', '2024-01-01', 'scheduled');
+
+      const res = await request(app).get('/api/meetings?clientId=c1').expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].title).toBe('Acme Sync');
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Briefing generation via API
+  // ──────────────────────────────────────────────
+
+  describe('Briefing', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
+    });
+
+    it('POST /api/meetings/:id/prepare generates a briefing', async () => {
+      const res = await request(app).post('/api/meetings/m1/prepare').expect(200);
+
+      expect(res.body).toBeDefined();
+      expect(res.body.clientName).toBe('Acme');
+      expect(res.body.meetingId).toBe('m1');
+    });
+
+    it('POST /api/meetings/:id/prepare returns 404 for missing meeting', async () => {
+      await request(app).post('/api/meetings/nonexistent/prepare').expect(404);
+    });
+
+    it('GET /api/meetings/:id/briefing returns 404 when no briefing exists', async () => {
+      const res = await request(app).get('/api/meetings/m1/briefing').expect(404);
+
+      expect(res.body.error).toMatch(/no briefing/i);
+    });
+
+    it('GET /api/meetings/:id/briefing returns stored briefing', async () => {
+      const briefingData = JSON.stringify({ clientName: 'Acme', sections: {} });
+      testDb
+        .prepare('UPDATE meetings SET briefing = ? WHERE id = ?')
+        .run(briefingData, 'm1');
+
+      const res = await request(app).get('/api/meetings/m1/briefing').expect(200);
+
+      expect(res.body.clientName).toBe('Acme');
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Error responses
+  // ──────────────────────────────────────────────
+
+  describe('Error Responses', () => {
+    it('returns JSON error format for all errors', async () => {
+      const res = await request(app).get('/api/clients/nonexistent').expect(404);
+
+      expect(res.body).toHaveProperty('error');
+      expect(typeof res.body.error).toBe('string');
+    });
+
+    it('returns 404 for meeting action items on nonexistent meeting', async () => {
+      await request(app).get('/api/meetings/nonexistent/action-items').expect(404);
+    });
+
+    it('returns 404 for post-call on nonexistent meeting', async () => {
+      await request(app).get('/api/meetings/nonexistent/post-call').expect(404);
+    });
+  });
+});
