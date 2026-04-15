@@ -103,7 +103,8 @@ router.get(
     } else if (clientId) {
       meetings = queries.getMeetingsByClient().all(clientId);
     } else {
-      meetings = queries.getMeetingsByStatus().all('scheduled');
+      // Return all meetings ordered by scheduled_at desc
+      meetings = queries.getAllMeetings().all();
     }
     res.json(meetings);
   }),

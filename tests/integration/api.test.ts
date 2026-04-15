@@ -39,6 +39,15 @@ vi.mock('../../src/db/index.js', () => {
       testDb.prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
     getMeetingsByStatus: () =>
       testDb.prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
+    getAllMeetings: () => testDb.prepare('SELECT * FROM meetings ORDER BY scheduled_at DESC'),
+    getMeetingsByStatusWithClient: () =>
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+      ),
+    getAllMeetingsWithClient: () =>
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
+      ),
     insertMeeting: () =>
       testDb.prepare(
         'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',
@@ -321,6 +330,29 @@ describe('API Integration Tests', () => {
 
       expect(res.body).toHaveLength(1);
       expect(res.body[0].title).toBe('Sync 2');
+    });
+
+    it('GET /api/meetings without filters returns ALL meetings (not just scheduled)', async () => {
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m1', 'c1', 'Sync 1', '2024-01-01', 'scheduled');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m2', 'c1', 'Sync 2', '2024-01-02', 'completed');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m3', 'c1', 'Sync 3', '2024-01-03', 'in_progress');
+
+      const res = await request(app).get('/api/meetings').expect(200);
+
+      // Should return ALL meetings, not just scheduled (previous bug returned only scheduled)
+      expect(res.body).toHaveLength(3);
     });
 
     it('GET /api/meetings filters by clientId', async () => {
