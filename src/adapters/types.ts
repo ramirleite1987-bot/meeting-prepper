@@ -64,13 +64,7 @@ export interface TaskReference {
   updatedAt: Date;
 }
 
-export type TaskStatus =
-  | 'backlog'
-  | 'todo'
-  | 'in-progress'
-  | 'in-review'
-  | 'done'
-  | 'cancelled';
+export type TaskStatus = 'backlog' | 'todo' | 'in-progress' | 'in-review' | 'done' | 'cancelled';
 
 // ──────────────────────────────────────────────
 // Adapter Interfaces
@@ -117,7 +111,10 @@ export interface IMeetingAdapter extends IDataSourceAdapter {
   getActionItems(meetingId: string): Promise<ActionItem[]>;
 
   /** Search for meetings matching the given query */
-  searchMeetings(query: string, options?: { since?: Date; limit?: number }): Promise<MeetingSummary[]>;
+  searchMeetings(
+    query: string,
+    options?: { since?: Date; limit?: number },
+  ): Promise<MeetingSummary[]>;
 }
 
 /**

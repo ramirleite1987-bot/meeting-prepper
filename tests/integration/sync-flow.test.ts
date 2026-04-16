@@ -53,8 +53,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getLinearSyncByIssue: () =>
       testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
-    getLinearSyncByMeeting: () =>
-      testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    getLinearSyncByMeeting: () => testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
     updateLinearSyncStatus: () =>
       testDb.prepare(
         'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -141,7 +140,8 @@ const mockFindExisting = vi.fn().mockResolvedValue(null);
 const mockStoreCrossReference = vi.fn();
 
 vi.mock('../../src/services/reconciliation.service.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/services/reconciliation.service.js')>();
+  const original =
+    await importOriginal<typeof import('../../src/services/reconciliation.service.js')>();
   return {
     ...original,
     ReconciliationService: vi.fn().mockImplementation(() => ({
@@ -159,22 +159,27 @@ function seedBasicData() {
   testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme Corp');
   testDb
     .prepare(
-      "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+      'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
     )
     .run('m1', 'c1', 'Weekly Sync', '2024-01-01', 'scheduled');
 }
 
-function seedActionItem(
-  id: string,
-  meetingId: string,
-  title: string,
-  contextHash: string,
-): void {
+function seedActionItem(id: string, meetingId: string, title: string, contextHash: string): void {
   testDb
     .prepare(
       'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     )
-    .run(id, meetingId, 'krisp', title, 'Description', 'owner@test.com', 'high', contextHash, 'pending');
+    .run(
+      id,
+      meetingId,
+      'krisp',
+      title,
+      'Description',
+      'owner@test.com',
+      'high',
+      contextHash,
+      'pending',
+    );
 }
 
 describe('Sync Flow Integration Tests', () => {
@@ -239,9 +244,7 @@ describe('Sync Flow Integration Tests', () => {
     it('throws error for nonexistent action item', async () => {
       seedBasicData();
 
-      await expect(syncService.syncActionItem('m1', 'nonexistent')).rejects.toThrow(
-        /not found/i,
-      );
+      await expect(syncService.syncActionItem('m1', 'nonexistent')).rejects.toThrow(/not found/i);
     });
   });
 
@@ -304,7 +307,7 @@ describe('Sync Flow Integration Tests', () => {
       // Insert sync record
       testDb
         .prepare(
-          "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
         )
         .run('sync-1', 'ai-1', 'm1', 'linear-issue-1', 'linear', 'synced');
 
@@ -327,7 +330,7 @@ describe('Sync Flow Integration Tests', () => {
 
       testDb
         .prepare(
-          "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
         )
         .run('sync-1', 'ai-1', 'm1', 'linear-issue-2', 'linear', 'synced');
 
@@ -359,9 +362,9 @@ describe('Sync Flow Integration Tests', () => {
         updatedAt: new Date().toISOString(),
       });
 
-      const history = testDb
-        .prepare('SELECT COUNT(*) as count FROM client_history')
-        .get() as { count: number };
+      const history = testDb.prepare('SELECT COUNT(*) as count FROM client_history').get() as {
+        count: number;
+      };
 
       expect(history.count).toBe(0);
     });
@@ -372,7 +375,7 @@ describe('Sync Flow Integration Tests', () => {
 
       testDb
         .prepare(
-          "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
         )
         .run('sync-1', 'ai-1', 'm1', 'linear-ts-1', 'linear', 'created');
 

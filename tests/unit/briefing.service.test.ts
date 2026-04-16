@@ -46,7 +46,12 @@ describe('BriefingService', () => {
       const context: ContextEntry[] = [
         makeEntry({ type: 'commit', title: 'Shipped v2.0', source: 'git' }),
         makeEntry({ type: 'task', title: 'Bug blocking release', content: 'blocked' }),
-        makeEntry({ type: 'note', title: 'Agreed on timeline', content: 'decided to ship Q1', source: 'obsidian' }),
+        makeEntry({
+          type: 'note',
+          title: 'Agreed on timeline',
+          content: 'decided to ship Q1',
+          source: 'obsidian',
+        }),
         makeEntry({ type: 'task', title: 'Pending review', content: 'pending task in backlog' }),
         makeEntry({ type: 'event', title: 'Sprint planning', source: 'calendar' }),
       ];

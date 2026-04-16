@@ -67,5 +67,12 @@ class Logger {
   }
 }
 
+/**
+ * Process-wide singleton logger. Prefer `logger.child('feature-name')` over
+ * mutating this instance so each subsystem gets its own context label.
+ *
+ * Output is structured JSON written to stdout (or stderr for errors); intended
+ * to be picked up by a downstream log shipper. Do not call `console.*` directly.
+ */
 export const logger = new Logger();
 export { Logger };

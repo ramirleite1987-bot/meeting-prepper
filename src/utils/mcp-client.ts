@@ -22,15 +22,11 @@ export async function createMCPClient(options: MCPClientOptions): Promise<Client
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const transport = new StreamableHTTPClientTransport(
-    new URL(serverUrl),
-    { requestInit: { headers } },
-  );
+  const transport = new StreamableHTTPClientTransport(new URL(serverUrl), {
+    requestInit: { headers },
+  });
 
-  const client = new Client(
-    { name: clientName, version: clientVersion },
-    { capabilities: {} },
-  );
+  const client = new Client({ name: clientName, version: clientVersion }, { capabilities: {} });
 
   await client.connect(transport);
   log.info('MCP client connected', { service, serverUrl });

@@ -74,7 +74,8 @@ export class ExtractionService {
       } else if (result.status === 'rejected') {
         const adapterIndex = results.indexOf(result);
         const adapterName = this.adapters[adapterIndex]?.name ?? 'unknown';
-        const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        const errorMsg =
+          result.reason instanceof Error ? result.reason.message : String(result.reason);
         errors.push({ source: adapterName, error: errorMsg });
         this.log.warn('Adapter extraction failed', { source: adapterName, error: errorMsg });
       }
@@ -84,9 +85,7 @@ export class ExtractionService {
     const mergedSummary = this.mergeSummaries(sourceResults);
     const decisions = this.mergeStringArrays(sourceResults.map((s) => s.decisions));
     const risks = this.mergeStringArrays(sourceResults.map((s) => s.risks));
-    const actionItems = this.deduplicateActionItems(
-      sourceResults.flatMap((s) => s.actionItems),
-    );
+    const actionItems = this.deduplicateActionItems(sourceResults.flatMap((s) => s.actionItems));
 
     const extraction: ExtractionResult = {
       meetingId,
@@ -257,7 +256,10 @@ export class ExtractionService {
    */
   private isTitleSimilar(a: string, b: string): boolean {
     const normalize = (s: string) =>
-      s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim();
 
     const na = normalize(a);
     const nb = normalize(b);
@@ -294,17 +296,16 @@ export class ExtractionService {
    * Initialize all adapters, ignoring failures (partial availability is acceptable).
    */
   private async initializeAdapters(): Promise<void> {
-    const results = await Promise.allSettled(
-      this.adapters.map((a) => a.initialize()),
-    );
+    const results = await Promise.allSettled(this.adapters.map((a) => a.initialize()));
 
     for (let i = 0; i < results.length; i++) {
       if (results[i].status === 'rejected') {
         this.log.warn('Adapter initialization failed', {
           source: this.adapters[i].name,
-          error: (results[i] as PromiseRejectedResult).reason instanceof Error
-            ? ((results[i] as PromiseRejectedResult).reason as Error).message
-            : String((results[i] as PromiseRejectedResult).reason),
+          error:
+            (results[i] as PromiseRejectedResult).reason instanceof Error
+              ? ((results[i] as PromiseRejectedResult).reason as Error).message
+              : String((results[i] as PromiseRejectedResult).reason),
         });
       }
     }

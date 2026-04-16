@@ -73,8 +73,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getLinearSyncByIssue: () =>
       testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
-    getLinearSyncByMeeting: () =>
-      testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    getLinearSyncByMeeting: () => testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
     updateLinearSyncStatus: () =>
       testDb.prepare(
         'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -280,18 +279,14 @@ describe('E2E Full Meeting Lifecycle', () => {
     expect(meetingRes.body.status).toBe('scheduled');
 
     // Step 3: Generate briefing
-    const briefingRes = await request(app)
-      .post(`/api/meetings/${meetingId}/prepare`)
-      .expect(200);
+    const briefingRes = await request(app).post(`/api/meetings/${meetingId}/prepare`).expect(200);
 
     expect(briefingRes.body.clientName).toBe('Acme Corp');
     expect(briefingRes.body.meetingId).toBe(meetingId);
     expect(mockGetClientContext).toHaveBeenCalledWith('Acme Corp');
 
     // Step 4: Trigger extraction (mocked MCP)
-    const extractRes = await request(app)
-      .post(`/api/meetings/${meetingId}/extract`)
-      .expect(200);
+    const extractRes = await request(app).post(`/api/meetings/${meetingId}/extract`).expect(200);
 
     expect(extractRes.body.summary).toBe('Roadmap review meeting');
     expect(extractRes.body.sources).toHaveLength(1);
@@ -301,9 +296,18 @@ describe('E2E Full Meeting Lifecycle', () => {
     // First seed an action item in DB so sync endpoint works
     testDb
       .prepare(
-        "INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run('ai-1', meetingId, 'krisp', 'Update roadmap doc', 'Reflect Q2 priorities', 'Alice', 'high', 'hash-abc');
+      .run(
+        'ai-1',
+        meetingId,
+        'krisp',
+        'Update roadmap doc',
+        'Reflect Q2 priorities',
+        'Alice',
+        'high',
+        'hash-abc',
+      );
 
     const syncRes = await request(app)
       .post(`/api/meetings/${meetingId}/action-items/ai-1/sync`)
@@ -339,23 +343,33 @@ describe('E2E Full Meeting Lifecycle', () => {
     // Seed history entries that would be created by the services
     testDb
       .prepare(
-        "INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (?, ?, ?, ?, ?)',
       )
       .run('h1', clientId, meetingId, 'meeting', JSON.stringify({ title: 'Q2 Roadmap Review' }));
     testDb
       .prepare(
-        "INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (?, ?, ?, ?, ?)',
       )
-      .run('h2', clientId, meetingId, 'task_created', JSON.stringify({ title: 'Update roadmap doc', linearIssueId: 'LIN-42' }));
+      .run(
+        'h2',
+        clientId,
+        meetingId,
+        'task_created',
+        JSON.stringify({ title: 'Update roadmap doc', linearIssueId: 'LIN-42' }),
+      );
     testDb
       .prepare(
-        "INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO client_history (id, client_id, meeting_id, event_type, event_data) VALUES (?, ?, ?, ?, ?)',
       )
-      .run('h3', clientId, meetingId, 'status_change', JSON.stringify({ linearIssueId: 'LIN-42', status: 'In Progress' }));
+      .run(
+        'h3',
+        clientId,
+        meetingId,
+        'status_change',
+        JSON.stringify({ linearIssueId: 'LIN-42', status: 'In Progress' }),
+      );
 
-    const timelineRes = await request(app)
-      .get(`/api/clients/${clientId}/timeline`)
-      .expect(200);
+    const timelineRes = await request(app).get(`/api/clients/${clientId}/timeline`).expect(200);
 
     expect(timelineRes.body).toHaveLength(3);
     const eventTypes = timelineRes.body.map((e: { event_type: string }) => e.event_type);
@@ -373,12 +387,12 @@ describe('E2E Full Meeting Lifecycle', () => {
     testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
     testDb
       .prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
       )
       .run('m1', 'c1', 'Weekly', '2026-04-15', 'scheduled');
     testDb
       .prepare(
-        "INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run('ai-1', 'm1', 'krisp', 'Fix bug', 'Critical fix', 'Bob', 'high', 'hash-123');
 
@@ -420,15 +434,13 @@ describe('E2E Full Meeting Lifecycle', () => {
     testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
     testDb
       .prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
       )
       .run('m1', 'c1', 'Weekly', '2026-04-15', 'scheduled');
 
     mockExtract.mockRejectedValue(new Error('MCP connection timeout'));
 
-    const res = await request(app)
-      .post('/api/meetings/m1/extract')
-      .expect(500);
+    const res = await request(app).post('/api/meetings/m1/extract').expect(500);
 
     expect(res.body.error).toBeDefined();
   });
@@ -437,20 +449,18 @@ describe('E2E Full Meeting Lifecycle', () => {
     testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
     testDb
       .prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
       )
       .run('m1', 'c1', 'Weekly', '2026-04-15', 'scheduled');
     testDb
       .prepare(
-        "INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .run('ai-1', 'm1', 'krisp', 'Task', 'Desc', 'Owner', 'medium', 'hash-x');
 
     mockSyncActionItem.mockRejectedValue(new Error('Linear API unavailable'));
 
-    const res = await request(app)
-      .post('/api/meetings/m1/action-items/ai-1/sync')
-      .expect(500);
+    const res = await request(app).post('/api/meetings/m1/action-items/ai-1/sync').expect(500);
 
     expect(res.body.error).toBeDefined();
   });
@@ -459,15 +469,13 @@ describe('E2E Full Meeting Lifecycle', () => {
     testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
     testDb
       .prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
       )
       .run('m1', 'c1', 'Weekly', '2026-04-15', 'scheduled');
 
     mockGetClientContext.mockRejectedValue(new Error('GitHub API rate limited'));
 
-    const res = await request(app)
-      .post('/api/meetings/m1/prepare')
-      .expect(500);
+    const res = await request(app).post('/api/meetings/m1/prepare').expect(500);
 
     expect(res.body.error).toBeDefined();
   });

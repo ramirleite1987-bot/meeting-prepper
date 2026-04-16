@@ -96,11 +96,7 @@ export class BriefingService {
     const riskKeywords = /risk|block|issue|bug|problem|delay|concern|pending|overdue|stuck/i;
 
     const items = context
-      .filter(
-        (e) =>
-          riskKeywords.test(e.title) ||
-          riskKeywords.test(e.content),
-      )
+      .filter((e) => riskKeywords.test(e.title) || riskKeywords.test(e.content))
       .slice(0, 10)
       .map((e) => `[${e.source}] ${e.title}`);
 

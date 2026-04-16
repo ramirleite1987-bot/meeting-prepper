@@ -45,7 +45,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     updateMeetingBriefing: () =>
       testDb.prepare(
-        "UPDATE meetings SET briefing = @briefing, updated_at = CURRENT_TIMESTAMP WHERE id = @id",
+        'UPDATE meetings SET briefing = @briefing, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
       ),
     updateMeetingPostCall: () =>
       testDb.prepare(
@@ -74,8 +74,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getLinearSyncByIssue: () =>
       testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
-    getLinearSyncByMeeting: () =>
-      testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    getLinearSyncByMeeting: () => testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
     updateLinearSyncStatus: () =>
       testDb.prepare(
         'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -206,10 +205,7 @@ describe('API Integration Tests', () => {
     });
 
     it('POST /api/clients returns 400 when name is missing', async () => {
-      const res = await request(app)
-        .post('/api/clients')
-        .send({ project: 'No Name' })
-        .expect(400);
+      const res = await request(app).post('/api/clients').send({ project: 'No Name' }).expect(400);
 
       expect(res.body.error).toMatch(/name is required/i);
     });
@@ -225,11 +221,9 @@ describe('API Integration Tests', () => {
     });
 
     it('GET /api/clients/:id returns a single client', async () => {
-      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)').run(
-        'c1',
-        'Acme',
-        'Proj',
-      );
+      testDb
+        .prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)')
+        .run('c1', 'Acme', 'Proj');
 
       const res = await request(app).get('/api/clients/c1').expect(200);
 
@@ -247,7 +241,7 @@ describe('API Integration Tests', () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
       testDb
         .prepare(
-          "INSERT INTO client_history (id, client_id, event_type, event_data) VALUES (?, ?, ?, ?)",
+          'INSERT INTO client_history (id, client_id, event_type, event_data) VALUES (?, ?, ?, ?)',
         )
         .run('h1', 'c1', 'meeting', '{"note":"test"}');
 
@@ -298,7 +292,7 @@ describe('API Integration Tests', () => {
     it('GET /api/meetings/:id returns a meeting', async () => {
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m1', 'c1', 'Sync', '2024-01-01', 'scheduled');
 
@@ -314,12 +308,12 @@ describe('API Integration Tests', () => {
     it('GET /api/meetings filters by status', async () => {
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m1', 'c1', 'Sync 1', '2024-01-01', 'scheduled');
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m2', 'c1', 'Sync 2', '2024-01-02', 'completed');
 
@@ -333,12 +327,12 @@ describe('API Integration Tests', () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c2', 'Other');
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m1', 'c1', 'Acme Sync', '2024-01-01', 'scheduled');
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m2', 'c2', 'Other Sync', '2024-01-01', 'scheduled');
 
@@ -358,7 +352,7 @@ describe('API Integration Tests', () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
     });
@@ -383,9 +377,7 @@ describe('API Integration Tests', () => {
 
     it('GET /api/meetings/:id/briefing returns stored briefing', async () => {
       const briefingData = JSON.stringify({ clientName: 'Acme', sections: {} });
-      testDb
-        .prepare('UPDATE meetings SET briefing = ? WHERE id = ?')
-        .run(briefingData, 'm1');
+      testDb.prepare('UPDATE meetings SET briefing = ? WHERE id = ?').run(briefingData, 'm1');
 
       const res = await request(app).get('/api/meetings/m1/briefing').expect(200);
 

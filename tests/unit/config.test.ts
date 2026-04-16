@@ -32,8 +32,8 @@ describe('Config', () => {
     process.env.DATABASE_PATH = '/tmp/test.db';
     process.env.LOG_LEVEL = 'debug';
     process.env.OBSIDIAN_VAULT_PATH = '/vault';
-    process.env.TELEGRAM_BOT_TOKEN = 'bot-token';
-    process.env.TELEGRAM_CHAT_ID = 'chat-123';
+    process.env.LINEAR_API_KEY = 'lin-api-xyz';
+    process.env.LINEAR_TEAM_ID = 'team-123';
 
     const { config } = await import('../../src/config.js');
 
@@ -42,8 +42,8 @@ describe('Config', () => {
     expect(config.databasePath).toBe('/tmp/test.db');
     expect(config.logLevel).toBe('debug');
     expect(config.obsidianVaultPath).toBe('/vault');
-    expect(config.telegramBotToken).toBe('bot-token');
-    expect(config.telegramChatId).toBe('chat-123');
+    expect(config.linearApiKey).toBe('lin-api-xyz');
+    expect(config.linearTeamId).toBe('team-123');
   });
 
   it('should coerce PORT string to number', async () => {
@@ -70,15 +70,15 @@ describe('Config', () => {
   it('should leave optional fields undefined when not set', async () => {
     delete process.env.OBSIDIAN_VAULT_PATH;
     delete process.env.CALENDAR_ICS_URL;
-    delete process.env.GITHUB_TOKEN;
     delete process.env.LINEAR_API_KEY;
+    delete process.env.LINEAR_WEBHOOK_SECRET;
 
     const { config } = await import('../../src/config.js');
 
     expect(config.obsidianVaultPath).toBeUndefined();
     expect(config.calendarIcsUrl).toBeUndefined();
-    expect(config.githubToken).toBeUndefined();
     expect(config.linearApiKey).toBeUndefined();
+    expect(config.linearWebhookSecret).toBeUndefined();
   });
 
   it('should reject invalid CALENDAR_ICS_URL', async () => {

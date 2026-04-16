@@ -44,7 +44,35 @@ jobs:
           if [ -n "$SCHEMA" ]; then
             echo "### Database Schema Changes" >> $GITHUB_STEP_SUMMARY
             echo "Review schema changes carefully before merging." >> $GITHUB_STEP_SUMMARY
+            echo "$SCHEMA" >> $GITHUB_STEP_SUMMARY
+            echo "schema_changed=true" >> $GITHUB_OUTPUT
           fi
+        id: change_summary
+
+  schema-review-required:
+    name: Schema Change Requires Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require label on schema changes
+        run: |
+          SCHEMA=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E 'schema\.sql|migration' || true)
+          if [ -z "$SCHEMA" ]; then
+            echo "No schema changes detected."
+            exit 0
+          fi
+          echo "Schema changes detected in:"
+          echo "$SCHEMA"
+          LABELS='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          if echo "$LABELS" | grep -q 'schema-reviewed'; then
+            echo "Schema changes have been reviewed (label present)."
+            exit 0
+          fi
+          echo "::error::Schema/migration files changed. Add the 'schema-reviewed' label after a DB-owner review."
+          exit 1
 
   dependency-check:
     name: Dependency Audit

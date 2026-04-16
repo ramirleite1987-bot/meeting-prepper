@@ -65,7 +65,13 @@ describe('KrispAdapter', () => {
     it('should return mapped meeting summaries', async () => {
       mockCallTool.mockResolvedValueOnce(
         mcpResponse([
-          { id: 'm1', title: 'Standup', date: '2025-01-01T10:00:00Z', attendees: ['Alice'], duration_minutes: 15 },
+          {
+            id: 'm1',
+            title: 'Standup',
+            date: '2025-01-01T10:00:00Z',
+            attendees: ['Alice'],
+            duration_minutes: 15,
+          },
           { id: 'm2', title: 'Retro', date: '2025-01-02T10:00:00Z', attendees: ['Bob'] },
         ]),
       );
@@ -116,7 +122,13 @@ describe('KrispAdapter', () => {
       // list_action_items
       mockCallTool.mockResolvedValueOnce(
         mcpResponse([
-          { id: 'a1', title: 'Implement OAuth', assignee: 'Alice', priority: 'high', status: 'pending' },
+          {
+            id: 'a1',
+            title: 'Implement OAuth',
+            assignee: 'Alice',
+            priority: 'high',
+            status: 'pending',
+          },
         ]),
       );
 
@@ -143,9 +155,7 @@ describe('KrispAdapter', () => {
       // search_meetings (still called but document ID extracted from meetingId)
       mockCallTool.mockResolvedValueOnce(mcpResponse([]));
       // get_document
-      mockCallTool.mockResolvedValueOnce(
-        mcpResponse({ title: 'Test', summary: 'Test meeting' }),
-      );
+      mockCallTool.mockResolvedValueOnce(mcpResponse({ title: 'Test', summary: 'Test meeting' }));
       // list_action_items
       mockCallTool.mockResolvedValueOnce(mcpResponse([]));
 

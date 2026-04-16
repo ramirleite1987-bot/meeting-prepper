@@ -9,12 +9,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMCPClient } from '../utils/mcp-client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
-import type {
-  IMeetingAdapter,
-  MeetingNotes,
-  MeetingSummary,
-  ActionItem,
-} from './types.js';
+import type { IMeetingAdapter, MeetingNotes, MeetingSummary, ActionItem } from './types.js';
 
 const log = logger.child('GranolaAdapter');
 
@@ -133,14 +128,11 @@ export class GranolaAdapter implements IMeetingAdapter {
     query: string,
     options?: { since?: Date; limit?: number },
   ): Promise<MeetingSummary[]> {
-    const results = await this.callTool<GranolaMeetingResult[]>(
-      'list_meetings',
-      {
-        query,
-        ...(options?.since && { since: options.since.toISOString() }),
-        ...(options?.limit && { limit: options.limit }),
-      },
-    );
+    const results = await this.callTool<GranolaMeetingResult[]>('list_meetings', {
+      query,
+      ...(options?.since && { since: options.since.toISOString() }),
+      ...(options?.limit && { limit: options.limit }),
+    });
 
     if (!results || !Array.isArray(results)) {
       return [];
@@ -157,10 +149,7 @@ export class GranolaAdapter implements IMeetingAdapter {
   }
 
   private async getMeetingNotesMcp(meetingId: string): Promise<MeetingNotes | null> {
-    const detail = await this.callTool<GranolaMeetingDetail>(
-      'get_meetings',
-      { id: meetingId },
-    );
+    const detail = await this.callTool<GranolaMeetingDetail>('get_meetings', { id: meetingId });
 
     if (!detail) {
       log.warn('Meeting not found via MCP', { meetingId });
@@ -204,9 +193,7 @@ export class GranolaAdapter implements IMeetingAdapter {
     if (options?.since) params.set('since', options.since.toISOString());
     if (options?.limit) params.set('limit', String(options.limit));
 
-    const data = await this.restGet<GranolaMeetingResult[]>(
-      `/v1/meetings?${params.toString()}`,
-    );
+    const data = await this.restGet<GranolaMeetingResult[]>(`/v1/meetings?${params.toString()}`);
 
     if (!data || !Array.isArray(data)) {
       return [];
@@ -251,7 +238,7 @@ export class GranolaAdapter implements IMeetingAdapter {
     try {
       const response = await fetch(`${GRANOLA_REST_BASE_URL}${path}`, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
       });
@@ -278,10 +265,7 @@ export class GranolaAdapter implements IMeetingAdapter {
   // Shared helpers
   // ──────────────────────────────────────────────
 
-  private mapActionItems(
-    items?: GranolaActionItemResult[],
-    meetingId?: string,
-  ): ActionItem[] {
+  private mapActionItems(items?: GranolaActionItemResult[], meetingId?: string): ActionItem[] {
     if (!items || !Array.isArray(items)) {
       return [];
     }
@@ -302,10 +286,7 @@ export class GranolaAdapter implements IMeetingAdapter {
   /**
    * Call an MCP tool with automatic 401 retry via token refresh.
    */
-  private async callTool<T>(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<T | null> {
+  private async callTool<T>(toolName: string, args: Record<string, unknown>): Promise<T | null> {
     if (!this.client) {
       log.error('Granola MCP client not initialized');
       return null;
@@ -346,9 +327,9 @@ export class GranolaAdapter implements IMeetingAdapter {
       return null;
     }
 
-    const textContent = result.content.find(
-      (c: { type: string }) => c.type === 'text',
-    ) as { type: 'text'; text: string } | undefined;
+    const textContent = result.content.find((c: { type: string }) => c.type === 'text') as
+      | { type: 'text'; text: string }
+      | undefined;
 
     if (!textContent) {
       return null;
@@ -385,9 +366,7 @@ export class GranolaAdapter implements IMeetingAdapter {
     });
   }
 
-  private mapPriority(
-    priority?: string,
-  ): 'urgent' | 'high' | 'medium' | 'low' | 'none' {
+  private mapPriority(priority?: string): 'urgent' | 'high' | 'medium' | 'low' | 'none' {
     if (!priority) return 'none';
     const normalized = priority.toLowerCase();
     if (normalized === 'urgent' || normalized === 'critical') return 'urgent';
@@ -397,9 +376,7 @@ export class GranolaAdapter implements IMeetingAdapter {
     return 'none';
   }
 
-  private mapStatus(
-    status?: string,
-  ): 'pending' | 'in-progress' | 'completed' | 'cancelled' {
+  private mapStatus(status?: string): 'pending' | 'in-progress' | 'completed' | 'cancelled' {
     if (!status) return 'pending';
     const normalized = status.toLowerCase();
     if (normalized === 'completed' || normalized === 'done') return 'completed';

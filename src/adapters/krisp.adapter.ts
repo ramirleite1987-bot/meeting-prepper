@@ -8,12 +8,7 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMCPClient } from '../utils/mcp-client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
-import type {
-  IMeetingAdapter,
-  MeetingNotes,
-  MeetingSummary,
-  ActionItem,
-} from './types.js';
+import type { IMeetingAdapter, MeetingNotes, MeetingSummary, ActionItem } from './types.js';
 
 const log = logger.child('KrispAdapter');
 
@@ -91,14 +86,11 @@ export class KrispAdapter implements IMeetingAdapter {
     query: string,
     options?: { since?: Date; limit?: number },
   ): Promise<MeetingSummary[]> {
-    const results = await this.callTool<KrispMeetingResult[]>(
-      'search_meetings',
-      {
-        query,
-        ...(options?.since && { since: options.since.toISOString() }),
-        ...(options?.limit && { limit: options.limit }),
-      },
-    );
+    const results = await this.callTool<KrispMeetingResult[]>('search_meetings', {
+      query,
+      ...(options?.since && { since: options.since.toISOString() }),
+      ...(options?.limit && { limit: options.limit }),
+    });
 
     if (!results || !Array.isArray(results)) {
       return [];
@@ -116,10 +108,9 @@ export class KrispAdapter implements IMeetingAdapter {
 
   async getMeetingNotes(meetingId: string): Promise<MeetingNotes | null> {
     // Step 1: Get document by searching for the meeting
-    const searchResults = await this.callTool<KrispMeetingResult[]>(
-      'search_meetings',
-      { query: meetingId },
-    );
+    const searchResults = await this.callTool<KrispMeetingResult[]>('search_meetings', {
+      query: meetingId,
+    });
 
     const documentId = this.extractDocumentId(meetingId, searchResults);
     if (!documentId) {
@@ -128,10 +119,7 @@ export class KrispAdapter implements IMeetingAdapter {
     }
 
     // Step 2: Get the full document
-    const doc = await this.callTool<KrispDocumentResult>(
-      'get_document',
-      { id: documentId },
-    );
+    const doc = await this.callTool<KrispDocumentResult>('get_document', { id: documentId });
 
     if (!doc) {
       log.warn('Document not found', { documentId, meetingId });
@@ -167,10 +155,9 @@ export class KrispAdapter implements IMeetingAdapter {
   }
 
   async getActionItems(meetingId: string): Promise<ActionItem[]> {
-    const results = await this.callTool<KrispActionItemResult[]>(
-      'list_action_items',
-      { meetingId },
-    );
+    const results = await this.callTool<KrispActionItemResult[]>('list_action_items', {
+      meetingId,
+    });
 
     if (!results || !Array.isArray(results)) {
       return [];
@@ -228,10 +215,7 @@ export class KrispAdapter implements IMeetingAdapter {
   /**
    * Call an MCP tool with automatic 401 retry via token refresh.
    */
-  private async callTool<T>(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<T | null> {
+  private async callTool<T>(toolName: string, args: Record<string, unknown>): Promise<T | null> {
     if (!this.client) {
       log.error('Krisp MCP client not initialized');
       return null;
@@ -272,9 +256,9 @@ export class KrispAdapter implements IMeetingAdapter {
       return null;
     }
 
-    const textContent = result.content.find(
-      (c: { type: string }) => c.type === 'text',
-    ) as { type: 'text'; text: string } | undefined;
+    const textContent = result.content.find((c: { type: string }) => c.type === 'text') as
+      | { type: 'text'; text: string }
+      | undefined;
 
     if (!textContent) {
       return null;
@@ -311,9 +295,7 @@ export class KrispAdapter implements IMeetingAdapter {
     });
   }
 
-  private mapPriority(
-    priority?: string,
-  ): 'urgent' | 'high' | 'medium' | 'low' | 'none' {
+  private mapPriority(priority?: string): 'urgent' | 'high' | 'medium' | 'low' | 'none' {
     if (!priority) return 'none';
     const normalized = priority.toLowerCase();
     if (normalized === 'urgent' || normalized === 'critical') return 'urgent';
@@ -323,9 +305,7 @@ export class KrispAdapter implements IMeetingAdapter {
     return 'none';
   }
 
-  private mapStatus(
-    status?: string,
-  ): 'pending' | 'in-progress' | 'completed' | 'cancelled' {
+  private mapStatus(status?: string): 'pending' | 'in-progress' | 'completed' | 'cancelled' {
     if (!status) return 'pending';
     const normalized = status.toLowerCase();
     if (normalized === 'completed' || normalized === 'done') return 'completed';

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { getDb, closeDb } from './db/index.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { traceId } from './middleware/trace-id.js';
 import { apiRouter } from './routes/api.js';
 import { viewRouter } from './routes/views.js';
 import webhookRouter from './routes/webhooks.js';
@@ -16,6 +17,7 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(traceId);
 
 // Request logging
 app.use((req, res, next) => {
@@ -26,6 +28,7 @@ app.use((req, res, next) => {
       path: req.path,
       status: res.statusCode,
       durationMs: Date.now() - start,
+      traceId: req.traceId,
     });
   });
   next();

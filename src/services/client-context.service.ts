@@ -82,9 +82,7 @@ export class ClientContextService {
     }
 
     // Sort by timestamp descending (most recent first)
-    entries.sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-    );
+    entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     if (options?.limit && entries.length > options.limit) {
       return entries.slice(0, options.limit);

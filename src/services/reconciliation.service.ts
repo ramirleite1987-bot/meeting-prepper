@@ -199,10 +199,7 @@ export class ReconciliationService {
       for (const issue of issues.nodes) {
         // Check if description contains the meeting ID or context hash
         const description = issue.description ?? '';
-        if (
-          description.includes(key.meetingId) ||
-          description.includes(key.contextHash)
-        ) {
+        if (description.includes(key.meetingId) || description.includes(key.contextHash)) {
           const state = await issue.state;
           return {
             id: issue.id,

@@ -22,13 +22,13 @@ interface LinearWebhookPayload {
 /** Map Linear state names to internal TaskStatus values. */
 function mapLinearStatus(stateName: string): TaskStatus {
   const map: Record<string, TaskStatus> = {
-    'Backlog': 'backlog',
-    'Todo': 'todo',
+    Backlog: 'backlog',
+    Todo: 'todo',
     'In Progress': 'in-progress',
     'In Review': 'in-review',
-    'Done': 'done',
-    'Cancelled': 'cancelled',
-    'Canceled': 'cancelled',
+    Done: 'done',
+    Cancelled: 'cancelled',
+    Canceled: 'cancelled',
   };
   return map[stateName] ?? 'todo';
 }
@@ -55,12 +55,16 @@ router.post('/linear', webhookVerify, (req: Request, res: Response) => {
         updatedAt: payload.updatedAt ?? new Date().toISOString(),
       })
       .then(() => {
-        notificationService.notify(
-          'linear_status_change',
-          `Linear issue status changed to ${statusName}`,
-          `Issue ${payload.data.id} moved to ${mappedStatus}`,
-          { linearIssueId: payload.data.id, status: mappedStatus },
-        ).catch(() => { /* notification is best-effort */ });
+        notificationService
+          .notify(
+            'linear_status_change',
+            `Linear issue status changed to ${statusName}`,
+            `Issue ${payload.data.id} moved to ${mappedStatus}`,
+            { linearIssueId: payload.data.id, status: mappedStatus },
+          )
+          .catch(() => {
+            /* notification is best-effort */
+          });
       })
       .catch((err: unknown) => {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -68,12 +72,13 @@ router.post('/linear', webhookVerify, (req: Request, res: Response) => {
           issueId: payload.data.id,
           error: errorMsg,
         });
-        notificationService.notify(
-          'sync_error',
-          'Linear webhook processing failed',
-          errorMsg,
-          { linearIssueId: payload.data.id },
-        ).catch(() => { /* notification is best-effort */ });
+        notificationService
+          .notify('sync_error', 'Linear webhook processing failed', errorMsg, {
+            linearIssueId: payload.data.id,
+          })
+          .catch(() => {
+            /* notification is best-effort */
+          });
       });
   });
 });

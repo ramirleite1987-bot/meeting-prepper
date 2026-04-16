@@ -8,10 +8,7 @@ import { randomUUID } from 'node:crypto';
 import type { ActionItem, TaskReference, TaskStatus } from '../adapters/types.js';
 import { LinearAdapter } from '../adapters/linear.adapter.js';
 import { getDb, queries } from '../db/index.js';
-import {
-  ReconciliationService,
-  buildReconciliationKey,
-} from './reconciliation.service.js';
+import { ReconciliationService, buildReconciliationKey } from './reconciliation.service.js';
 import { logger } from '../utils/logger.js';
 
 // ──────────────────────────────────────────────
@@ -234,9 +231,7 @@ export class SyncService {
     });
 
     // Add client_history event
-    const meeting = queries.getMeetingById().get(meetingId) as
-      | Record<string, unknown>
-      | undefined;
+    const meeting = queries.getMeetingById().get(meetingId) as Record<string, unknown> | undefined;
 
     if (meeting) {
       const clientId = meeting.client_id as string;

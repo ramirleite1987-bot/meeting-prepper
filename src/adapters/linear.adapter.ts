@@ -5,12 +5,7 @@
  */
 
 import { LinearClient } from '@linear/sdk';
-import type {
-  ITaskAdapter,
-  ActionItem,
-  TaskReference,
-  TaskStatus,
-} from './types.js';
+import type { ITaskAdapter, ActionItem, TaskReference, TaskStatus } from './types.js';
 
 /** Map Linear workflow state names to internal TaskStatus */
 function mapLinearState(stateName: string): TaskStatus {
@@ -27,12 +22,17 @@ function mapLinearState(stateName: string): TaskStatus {
 /** Map internal priority to Linear priority number (0=none, 1=urgent, 2=high, 3=medium, 4=low) */
 function mapPriorityToLinear(priority?: ActionItem['priority']): number {
   switch (priority) {
-    case 'urgent': return 1;
-    case 'high': return 2;
-    case 'medium': return 3;
-    case 'low': return 4;
+    case 'urgent':
+      return 1;
+    case 'high':
+      return 2;
+    case 'medium':
+      return 3;
+    case 'low':
+      return 4;
     case 'none':
-    default: return 0;
+    default:
+      return 0;
   }
 }
 
@@ -114,10 +114,7 @@ export class LinearAdapter implements ITaskAdapter {
     };
   }
 
-  async updateTask(
-    taskId: string,
-    updates: Partial<ActionItem>,
-  ): Promise<TaskReference> {
+  async updateTask(taskId: string, updates: Partial<ActionItem>): Promise<TaskReference> {
     this.ensureClient();
 
     const input: Record<string, unknown> = {};
@@ -209,8 +206,7 @@ export class LinearAdapter implements ITaskAdapter {
         return await fn();
       } catch (error: unknown) {
         lastError = error;
-        const isRateLimit =
-          error instanceof Error && error.message.includes('rate limit');
+        const isRateLimit = error instanceof Error && error.message.includes('rate limit');
         if (!isRateLimit || attempt === maxRetries - 1) {
           throw error;
         }

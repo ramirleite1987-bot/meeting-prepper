@@ -18,15 +18,15 @@ export function webhookVerify(req: Request, res: Response, next: NextFunction): 
   }
 
   const body = JSON.stringify(req.body);
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(body)
-    .digest('hex');
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
 
   const sigBuffer = Buffer.from(signature, 'hex');
   const expectedBuffer = Buffer.from(expected, 'hex');
 
-  if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+  if (
+    sigBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(sigBuffer, expectedBuffer)
+  ) {
     logger.warn('Webhook signature verification failed');
     res.status(401).json({ error: 'Invalid signature' });
     return;

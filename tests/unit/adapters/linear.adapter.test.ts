@@ -225,9 +225,7 @@ describe('LinearAdapter', () => {
     });
 
     it('should default to todo when state is null', async () => {
-      mockLinearClient.issue.mockResolvedValueOnce(
-        makeIssue({ state: Promise.resolve(null) }),
-      );
+      mockLinearClient.issue.mockResolvedValueOnce(makeIssue({ state: Promise.resolve(null) }));
       const status = await adapter.getTaskStatus('issue-1');
       expect(status).toBe('todo');
     });

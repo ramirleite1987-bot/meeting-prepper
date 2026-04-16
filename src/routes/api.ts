@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Request } from 'express';
 import { randomUUID } from 'node:crypto';
 import { queries } from '../db/index.js';
 import { BriefingService } from '../services/briefing.service.js';
@@ -7,6 +7,7 @@ import { ExtractionService } from '../services/extraction.service.js';
 import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
+import { asyncHandler } from '../middleware/async-handler.js';
 import { notificationService } from '../services/notification.service.js';
 
 const router = Router();
@@ -32,17 +33,17 @@ function createError(message: string, statusCode: number): AppError {
 // Clients
 // ──────────────────────────────────────────────
 
-router.get('/clients', (_req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/clients',
+  asyncHandler((_req, res) => {
     const clients = queries.getAllClients().all();
     res.json(clients);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.post('/clients', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.post(
+  '/clients',
+  asyncHandler((req, res) => {
     const { name, project } = req.body as { name?: string; project?: string };
     if (!name) {
       throw createError('name is required', 400);
@@ -52,42 +53,39 @@ router.post('/clients', (req: Request, res: Response, next: NextFunction) => {
     queries.insertClient().run({ id, name, project: project ?? null });
     const client = queries.getClientById().get(id);
     res.status(201).json(client);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/clients/:id',
+  asyncHandler((req, res) => {
     const client = queries.getClientById().get(param(req, 'id'));
     if (!client) {
       throw createError('Client not found', 404);
     }
     res.json(client);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/clients/:id/timeline', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/clients/:id/timeline',
+  asyncHandler((req, res) => {
     const client = queries.getClientById().get(param(req, 'id'));
     if (!client) {
       throw createError('Client not found', 404);
     }
     const history = queries.getClientHistory().all(param(req, 'id'));
     res.json(history);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
 // ──────────────────────────────────────────────
 // Meetings
 // ──────────────────────────────────────────────
 
-router.get('/meetings', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/meetings',
+  asyncHandler((req, res) => {
     const { status, clientId } = req.query as { status?: string; clientId?: string };
     let meetings;
     if (status) {
@@ -95,17 +93,15 @@ router.get('/meetings', (req: Request, res: Response, next: NextFunction) => {
     } else if (clientId) {
       meetings = queries.getMeetingsByClient().all(clientId);
     } else {
-      // Return all meetings ordered by scheduled_at desc
       meetings = queries.getMeetingsByStatus().all('scheduled');
     }
     res.json(meetings);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.post('/meetings', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.post(
+  '/meetings',
+  asyncHandler((req, res) => {
     const { clientId, title, scheduledAt } = req.body as {
       clientId?: string;
       title?: string;
@@ -132,31 +128,33 @@ router.post('/meetings', (req: Request, res: Response, next: NextFunction) => {
 
     const meeting = queries.getMeetingById().get(id);
     res.status(201).json(meeting);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/meetings/:id', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/meetings/:id',
+  asyncHandler((req, res) => {
     const meeting = queries.getMeetingById().get(param(req, 'id'));
     if (!meeting) {
       throw createError('Meeting not found', 404);
     }
     res.json(meeting);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.post('/meetings/:id/prepare', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const meeting = queries.getMeetingById().get(param(req, 'id')) as Record<string, unknown> | undefined;
+router.post(
+  '/meetings/:id/prepare',
+  asyncHandler(async (req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
       throw createError('Meeting not found', 404);
     }
 
-    const client = queries.getClientById().get(meeting.client_id as string) as Record<string, unknown> | undefined;
+    const client = queries.getClientById().get(meeting.client_id as string) as
+      | Record<string, unknown>
+      | undefined;
     if (!client) {
       throw createError('Client not found for this meeting', 404);
     }
@@ -165,7 +163,7 @@ router.post('/meetings/:id/prepare', async (req: Request, res: Response, next: N
     const context = await clientContextService.getClientContext(clientName);
     const briefing = await briefingService.generateBriefing(param(req, 'id'), clientName, context);
 
-    logger.info('Briefing generated', { meetingId: param(req, 'id') });
+    logger.info('Briefing generated', { meetingId: param(req, 'id'), traceId: req.traceId });
     await notificationService.notify(
       'briefing_generated',
       `Briefing generated for ${clientName}`,
@@ -173,14 +171,15 @@ router.post('/meetings/:id/prepare', async (req: Request, res: Response, next: N
       { meetingId: param(req, 'id'), clientName },
     );
     res.json(briefing);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/meetings/:id/briefing', (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const meeting = queries.getMeetingById().get(param(req, 'id')) as Record<string, unknown> | undefined;
+router.get(
+  '/meetings/:id/briefing',
+  asyncHandler((req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
       throw createError('Meeting not found', 404);
     }
@@ -195,17 +194,16 @@ router.get('/meetings/:id/briefing', (req: Request, res: Response, next: NextFun
     } catch {
       throw createError('Briefing data is corrupted', 500);
     }
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
 // ──────────────────────────────────────────────
 // Post-Call Extraction
 // ──────────────────────────────────────────────
 
-router.post('/meetings/:id/extract', async (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.post(
+  '/meetings/:id/extract',
+  asyncHandler(async (req, res) => {
     const meeting = queries.getMeetingById().get(param(req, 'id'));
     if (!meeting) {
       throw createError('Meeting not found', 404);
@@ -213,22 +211,27 @@ router.post('/meetings/:id/extract', async (req: Request, res: Response, next: N
 
     const result = await extractionService.extract(param(req, 'id'));
 
-    logger.info('Extraction completed', { meetingId: param(req, 'id'), sources: result.sources.length });
+    logger.info('Extraction completed', {
+      meetingId: param(req, 'id'),
+      sources: result.sources.length,
+      traceId: req.traceId,
+    });
     await notificationService.notify(
       'extraction_completed',
       'Post-call extraction completed',
       `${result.actionItems.length} action items extracted from ${result.sources.length} source(s)`,
-      { meetingId: param(req, 'id'), sources: result.sources.map(s => s.source) },
+      { meetingId: param(req, 'id'), sources: result.sources.map((s) => s.source) },
     );
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/meetings/:id/post-call', (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const meeting = queries.getMeetingById().get(param(req, 'id')) as Record<string, unknown> | undefined;
+router.get(
+  '/meetings/:id/post-call',
+  asyncHandler((req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
       throw createError('Meeting not found', 404);
     }
@@ -243,13 +246,12 @@ router.get('/meetings/:id/post-call', (req: Request, res: Response, next: NextFu
     } catch {
       throw createError('Post-call data is corrupted', 500);
     }
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/meetings/:id/action-items', (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/meetings/:id/action-items',
+  asyncHandler((req, res) => {
     const meeting = queries.getMeetingById().get(param(req, 'id'));
     if (!meeting) {
       throw createError('Meeting not found', 404);
@@ -257,17 +259,16 @@ router.get('/meetings/:id/action-items', (req: Request, res: Response, next: Nex
 
     const actionItems = queries.getActionItemsByMeeting().all(param(req, 'id'));
     res.json(actionItems);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
 // ──────────────────────────────────────────────
 // Linear Sync
 // ──────────────────────────────────────────────
 
-router.post('/meetings/:id/action-items/:itemId/sync', async (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.post(
+  '/meetings/:id/action-items/:itemId/sync',
+  asyncHandler(async (req, res) => {
     const meeting = queries.getMeetingById().get(param(req, 'id'));
     if (!meeting) {
       throw createError('Meeting not found', 404);
@@ -275,21 +276,28 @@ router.post('/meetings/:id/action-items/:itemId/sync', async (req: Request, res:
 
     const result = await syncService.syncActionItem(param(req, 'id'), param(req, 'itemId'));
 
-    logger.info('Action item synced', { meetingId: param(req, 'id'), actionItemId: param(req, 'itemId') });
+    logger.info('Action item synced', {
+      meetingId: param(req, 'id'),
+      actionItemId: param(req, 'itemId'),
+      traceId: req.traceId,
+    });
     await notificationService.notify(
       'action_item_synced',
       'Action item synced to Linear',
       `Issue ${result.linearIssueId} ${result.status}`,
-      { meetingId: param(req, 'id'), actionItemId: param(req, 'itemId'), linearIssueId: result.linearIssueId },
+      {
+        meetingId: param(req, 'id'),
+        actionItemId: param(req, 'itemId'),
+        linearIssueId: result.linearIssueId,
+      },
     );
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.post('/meetings/:id/sync-all', async (req: Request, res: Response, next: NextFunction) => {
-  try {
+router.post(
+  '/meetings/:id/sync-all',
+  asyncHandler(async (req, res) => {
     const meeting = queries.getMeetingById().get(param(req, 'id'));
     if (!meeting) {
       throw createError('Meeting not found', 404);
@@ -297,27 +305,28 @@ router.post('/meetings/:id/sync-all', async (req: Request, res: Response, next: 
 
     const result = await syncService.syncAllActionItems(param(req, 'id'));
 
-    logger.info('All action items synced', { meetingId: param(req, 'id'), synced: result.results.length });
+    logger.info('All action items synced', {
+      meetingId: param(req, 'id'),
+      synced: result.results.length,
+      traceId: req.traceId,
+    });
     res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
 // ──────────────────────────────────────────────
 // Notifications
 // ──────────────────────────────────────────────
 
-router.get('/notifications', (_req: Request, res: Response, next: NextFunction) => {
-  try {
+router.get(
+  '/notifications',
+  asyncHandler((_req, res) => {
     const notifications = notificationService.getRecentNotifications();
     res.json(notifications);
-  } catch (err) {
-    next(err);
-  }
-});
+  }),
+);
 
-router.get('/notifications/stream', (req: Request, res: Response) => {
+router.get('/notifications/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -332,4 +341,10 @@ router.get('/notifications/stream', (req: Request, res: Response) => {
   });
 });
 
-export { router as apiRouter, clientContextService, briefingService, extractionService, syncService };
+export {
+  router as apiRouter,
+  clientContextService,
+  briefingService,
+  extractionService,
+  syncService,
+};

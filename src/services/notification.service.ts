@@ -150,9 +150,7 @@ export class NotificationService {
       metadata,
     };
 
-    await Promise.allSettled(
-      this.channels.map((channel) => channel.send(notification)),
-    );
+    await Promise.allSettled(this.channels.map((channel) => channel.send(notification)));
   }
 
   getRecentNotifications(limit = 20): Notification[] {
@@ -164,4 +162,9 @@ export class NotificationService {
   }
 }
 
+/**
+ * Process-wide singleton. Holds an in-memory ring buffer of recent
+ * notifications and the active SSE subscriber set. Constructing additional
+ * instances will create disconnected channels, so always import this export.
+ */
 export const notificationService = new NotificationService();
