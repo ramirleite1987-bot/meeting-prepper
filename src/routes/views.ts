@@ -4,6 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { queries } from '../db/index.js';
 import { clientContextService, briefingService } from './api.js';
+import { search as runSearch } from '../services/search.service.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -112,6 +113,68 @@ router.get('/', (_req: Request, res: Response, next: NextFunction) => {
     const template = loadTemplate('dashboard');
     const content = renderSimpleTemplate(template, { meetings, clients });
     const html = renderLayout('Dashboard', content);
+
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Search view
+// ──────────────────────────────────────────────
+
+router.get('/search', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = ((req.query.q as string | undefined) ?? '').slice(0, 200);
+    const data = runSearch(q);
+
+    const grouped = {
+      query: data.query,
+      total: data.total,
+      hasQuery: data.query.length > 0,
+      hasResults: data.total > 0,
+      counts: data.counts,
+      clients: data.results
+        .filter((r) => r.type === 'client')
+        .map((r) => ({ ...r, snippet: r.snippet })),
+      meetings: data.results
+        .filter((r) => r.type === 'meeting')
+        .map((r) => ({
+          ...r,
+          status: (r.meta as { status?: string }).status ?? '',
+          clientName: (r.meta as { clientName?: string | null }).clientName ?? '—',
+        })),
+      actionItems: data.results
+        .filter((r) => r.type === 'action_item')
+        .map((r) => {
+          const meta = r.meta as {
+            owner?: string | null;
+            priority?: string;
+            status?: string;
+            clientName?: string | null;
+            meetingTitle?: string | null;
+          };
+          return {
+            ...r,
+            owner: meta.owner ?? 'Unassigned',
+            priority: meta.priority ?? 'medium',
+            status: meta.status ?? 'pending',
+            clientName: meta.clientName ?? '—',
+            meetingTitle: meta.meetingTitle ?? '',
+            priorityClass:
+              meta.priority === 'high'
+                ? 'bg-red-100 text-red-800'
+                : meta.priority === 'low'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800',
+          };
+        }),
+    };
+
+    const template = loadTemplate('search');
+    const content = renderSimpleTemplate(template, grouped);
+    const html = renderLayout(`Search${data.query ? ` — ${data.query}` : ''}`, content);
 
     res.type('html').send(html);
   } catch (err) {

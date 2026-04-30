@@ -5,6 +5,7 @@ import { BriefingService } from '../services/briefing.service.js';
 import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
 import { SyncService } from '../services/sync.service.js';
+import { search as runSearch } from '../services/search.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -323,6 +324,19 @@ router.get(
   asyncHandler((_req, res) => {
     const notifications = notificationService.getRecentNotifications();
     res.json(notifications);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Search
+// ──────────────────────────────────────────────
+
+router.get(
+  '/search',
+  asyncHandler((req, res) => {
+    const q = (req.query.q as string | undefined) ?? '';
+    const result = runSearch(q);
+    res.json(result);
   }),
 );
 

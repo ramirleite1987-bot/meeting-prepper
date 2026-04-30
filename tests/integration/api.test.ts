@@ -386,6 +386,101 @@ describe('API Integration Tests', () => {
   });
 
   // ──────────────────────────────────────────────
+  // Search
+  // ──────────────────────────────────────────────
+
+  describe('Search', () => {
+    beforeEach(() => {
+      testDb
+        .prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)')
+        .run('c1', 'Acme Corp', 'Project Apollo');
+      testDb
+        .prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)')
+        .run('c2', 'Globex', 'Saturn');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status, briefing) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'm1',
+          'c1',
+          'Apollo kickoff sync',
+          '2026-04-30T10:00:00Z',
+          'scheduled',
+          JSON.stringify({ summary: 'Discuss launch plan for Apollo release' }),
+        );
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m2', 'c2', 'Saturn weekly', '2026-04-30T11:00:00Z', 'scheduled');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'a1',
+          'm1',
+          'manual',
+          'Ship Apollo dashboard',
+          'Build the new analytics dashboard for the Apollo project',
+          'alice',
+          'high',
+          'pending',
+          'hash-1',
+        );
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'a2',
+          'm2',
+          'manual',
+          'Renew Saturn contract',
+          null,
+          'bob',
+          'medium',
+          'pending',
+          'hash-2',
+        );
+    });
+
+    it('GET /api/search returns matches across clients, meetings, and action items', async () => {
+      const res = await request(app).get('/api/search?q=apollo').expect(200);
+
+      expect(res.body.query).toBe('apollo');
+      expect(res.body.total).toBeGreaterThanOrEqual(3);
+      expect(res.body.counts.clients).toBeGreaterThanOrEqual(1);
+      expect(res.body.counts.meetings).toBeGreaterThanOrEqual(1);
+      expect(res.body.counts.action_items).toBeGreaterThanOrEqual(1);
+
+      const types = res.body.results.map((r: { type: string }) => r.type);
+      expect(types).toContain('client');
+      expect(types).toContain('meeting');
+      expect(types).toContain('action_item');
+    });
+
+    it('GET /api/search returns empty result for empty query', async () => {
+      const res = await request(app).get('/api/search?q=').expect(200);
+      expect(res.body.total).toBe(0);
+      expect(res.body.results).toEqual([]);
+    });
+
+    it('GET /api/search matches action item owner', async () => {
+      const res = await request(app).get('/api/search?q=alice').expect(200);
+      const actionHits = res.body.results.filter((r: { type: string }) => r.type === 'action_item');
+      expect(actionHits.length).toBeGreaterThanOrEqual(1);
+      expect(actionHits[0].title).toBe('Ship Apollo dashboard');
+    });
+
+    it('GET /api/search escapes LIKE wildcards in user input', async () => {
+      const res = await request(app).get('/api/search?q=%25').expect(200);
+      expect(res.body.total).toBe(0);
+    });
+  });
+
+  // ──────────────────────────────────────────────
   // Error responses
   // ──────────────────────────────────────────────
 
