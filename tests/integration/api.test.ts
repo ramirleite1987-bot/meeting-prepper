@@ -386,6 +386,27 @@ describe('API Integration Tests', () => {
   });
 
   // ──────────────────────────────────────────────
+  // Stats
+  // ──────────────────────────────────────────────
+
+  describe('Stats', () => {
+    it('GET /api/stats returns the full payload shape', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m1', 'c1', 'M1', 'completed');
+
+      const res = await request(app).get('/api/stats').expect(200);
+      expect(res.body.clients.total).toBe(1);
+      expect(res.body.meetings.total).toBe(1);
+      expect(res.body).toHaveProperty('topClients');
+      expect(res.body).toHaveProperty('topOwners');
+      expect(res.body).toHaveProperty('averages');
+      expect(res.body).toHaveProperty('linearSync');
+    });
+  });
+
+  // ──────────────────────────────────────────────
   // Briefing markdown export
   // ──────────────────────────────────────────────
 

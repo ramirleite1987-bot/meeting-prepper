@@ -14,6 +14,7 @@ import {
 } from '../services/action-items.service.js';
 import { buildAgenda } from '../services/agenda.service.js';
 import { formatBriefingAsMarkdown } from '../services/briefing-export.service.js';
+import { buildStats } from '../services/stats.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -384,6 +385,17 @@ router.get(
   asyncHandler((_req, res) => {
     const notifications = notificationService.getRecentNotifications();
     res.json(notifications);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Stats
+// ──────────────────────────────────────────────
+
+router.get(
+  '/stats',
+  asyncHandler((_req, res) => {
+    res.json(buildStats());
   }),
 );
 

@@ -1,0 +1,95 @@
+<div class="space-y-6">
+  <header>
+    <h1 class="text-2xl font-bold text-gray-900">Stats</h1>
+    <p class="text-sm text-gray-500 mt-1">A snapshot of your meeting prep workspace.</p>
+  </header>
+
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-xs uppercase tracking-wide text-gray-500">Clients</div>
+      <div class="text-3xl font-bold mt-1">{{clients.total}}</div>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-xs uppercase tracking-wide text-gray-500">Meetings</div>
+      <div class="text-3xl font-bold mt-1">{{meetings.total}}</div>
+      <div class="text-xs text-gray-500 mt-1">{{meetings.scheduled}} scheduled · {{meetings.completed}} done</div>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-xs uppercase tracking-wide text-gray-500">Action items</div>
+      <div class="text-3xl font-bold mt-1">{{actionItems.total}}</div>
+      <div class="text-xs text-gray-500 mt-1">{{actionItems.pending}} pending · {{actionItems.completed}} done</div>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-xs uppercase tracking-wide text-gray-500">Briefing coverage</div>
+      <div class="text-3xl font-bold mt-1">{{meetings.briefingCoveragePct}}%</div>
+      <div class="text-xs text-gray-500 mt-1">{{meetings.withBriefing}} of {{meetings.total}} meetings</div>
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-sm font-semibold text-gray-700 mb-2">Action items by status</div>
+      <ul class="text-sm text-gray-700 space-y-1">
+        <li class="flex justify-between"><span>Pending</span><span class="font-medium">{{actionItems.pending}}</span></li>
+        <li class="flex justify-between"><span>Synced</span><span class="font-medium">{{actionItems.synced}}</span></li>
+        <li class="flex justify-between"><span>Completed</span><span class="font-medium">{{actionItems.completed}}</span></li>
+        <li class="flex justify-between text-red-700"><span>Overdue</span><span class="font-medium">{{actionItems.overdue}}</span></li>
+      </ul>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-sm font-semibold text-gray-700 mb-2">Action items by priority</div>
+      <ul class="text-sm text-gray-700 space-y-1">
+        <li class="flex justify-between"><span>High</span><span class="font-medium">{{actionItems.high}}</span></li>
+        <li class="flex justify-between"><span>Medium</span><span class="font-medium">{{actionItems.medium}}</span></li>
+        <li class="flex justify-between"><span>Low</span><span class="font-medium">{{actionItems.low}}</span></li>
+      </ul>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-sm font-semibold text-gray-700 mb-2">Linear sync</div>
+      <ul class="text-sm text-gray-700 space-y-1">
+        <li class="flex justify-between"><span>Total synced</span><span class="font-medium">{{linearSync.total}}</span></li>
+        <li class="flex justify-between"><span>Created</span><span class="font-medium">{{linearSync.created}}</span></li>
+        <li class="flex justify-between"><span>Updated</span><span class="font-medium">{{linearSync.updated}}</span></li>
+        <li class="flex justify-between"><span>Closed</span><span class="font-medium">{{linearSync.closed}}</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-sm font-semibold text-gray-700 mb-3">Most active clients (last 30 days)</div>
+      {{#if hasTopClients}}
+        <ol class="space-y-2">
+          {{#each topClients}}
+            <li class="flex items-center justify-between text-sm">
+              <a href="/clients/{{this.id}}" class="text-indigo-600 hover:underline">{{this.name}}</a>
+              <span class="text-gray-500">{{this.meetings_30d}} meeting(s)</span>
+            </li>
+          {{/each}}
+        </ol>
+      {{else}}
+        <p class="text-sm text-gray-500">No meetings in the last 30 days.</p>
+      {{/if}}
+    </div>
+    <div class="bg-white border border-gray-200 rounded-lg p-4">
+      <div class="text-sm font-semibold text-gray-700 mb-3">Owners with most open items</div>
+      {{#if hasTopOwners}}
+        <ol class="space-y-2">
+          {{#each topOwners}}
+            <li class="flex items-center justify-between text-sm">
+              <a href="/action-items?owner={{this.owner}}" class="text-indigo-600 hover:underline">{{this.owner}}</a>
+              <span class="text-gray-500">{{this.open_items}} open</span>
+            </li>
+          {{/each}}
+        </ol>
+      {{else}}
+        <p class="text-sm text-gray-500">No open action items.</p>
+      {{/if}}
+    </div>
+  </section>
+
+  <section class="bg-white border border-gray-200 rounded-lg p-4">
+    <div class="text-sm font-semibold text-gray-700">Average action items per completed meeting</div>
+    <div class="text-3xl font-bold mt-1">{{avgDisplay}}</div>
+  </section>
+</div>

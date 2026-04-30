@@ -12,6 +12,7 @@ import {
   updateStatus as updateActionItemStatusFn,
 } from '../services/action-items.service.js';
 import { buildAgenda } from '../services/agenda.service.js';
+import { buildStats } from '../services/stats.service.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -121,6 +122,31 @@ router.get('/', (_req: Request, res: Response, next: NextFunction) => {
     const content = renderSimpleTemplate(template, { meetings, clients });
     const html = renderLayout('Dashboard', content);
 
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Stats view
+// ──────────────────────────────────────────────
+
+router.get('/stats', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stats = buildStats();
+    const data = {
+      ...stats,
+      hasTopClients: stats.topClients.length > 0,
+      hasTopOwners: stats.topOwners.length > 0,
+      avgDisplay:
+        stats.averages.actionItemsPerCompletedMeeting === null
+          ? '—'
+          : String(stats.averages.actionItemsPerCompletedMeeting),
+    };
+    const template = loadTemplate('stats');
+    const content = renderSimpleTemplate(template, data);
+    const html = renderLayout('Stats', content);
     res.type('html').send(html);
   } catch (err) {
     next(err);
