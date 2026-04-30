@@ -11,6 +11,7 @@ import {
   isValidStatus,
   updateStatus as updateActionItemStatusFn,
 } from '../services/action-items.service.js';
+import { buildAgenda } from '../services/agenda.service.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -120,6 +121,83 @@ router.get('/', (_req: Request, res: Response, next: NextFunction) => {
     const content = renderSimpleTemplate(template, { meetings, clients });
     const html = renderLayout('Dashboard', content);
 
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Agenda view
+// ──────────────────────────────────────────────
+
+function formatStartsIn(minutes: number | null): string {
+  if (minutes === null) return '';
+  const abs = Math.abs(minutes);
+  const sign = minutes < 0 ? 'ago' : '';
+  if (abs < 60) return `in ${minutes} min`.replace('in -', `${abs} min ${sign} `).trim();
+  const hours = Math.round(abs / 60);
+  if (hours < 24) return minutes < 0 ? `${hours}h ago` : `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return minutes < 0 ? `${days}d ago` : `in ${days}d`;
+}
+
+function bucketColor(bucket: string): string {
+  switch (bucket) {
+    case 'overdue':
+      return 'bg-red-50 border-red-200';
+    case 'today':
+      return 'bg-indigo-50 border-indigo-200';
+    case 'tomorrow':
+      return 'bg-blue-50 border-blue-200';
+    case 'this_week':
+      return 'bg-white border-gray-200';
+    case 'later':
+      return 'bg-white border-gray-200';
+    default:
+      return 'bg-gray-50 border-gray-200';
+  }
+}
+
+router.get('/agenda', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const agenda = buildAgenda();
+
+    const next = agenda.next
+      ? {
+          ...agenda.next,
+          starts_in_label: formatStartsIn(agenda.next.starts_in_minutes),
+          scheduled_label: agenda.next.scheduled_at
+            ? new Date(agenda.next.scheduled_at).toLocaleString()
+            : 'Unscheduled',
+          client_name: agenda.next.client_name ?? '—',
+        }
+      : null;
+
+    const buckets = agenda.buckets.map((b) => ({
+      ...b,
+      colorClass: bucketColor(b.bucket),
+      meetings: b.meetings.map((m) => ({
+        ...m,
+        scheduled_label: m.scheduled_at ? new Date(m.scheduled_at).toLocaleString() : 'Unscheduled',
+        starts_in_label: formatStartsIn(m.starts_in_minutes),
+        client_name: m.client_name ?? '—',
+        is_completed: m.status === 'completed',
+        needs_briefing: !m.has_briefing && m.status !== 'completed',
+        needs_post_call: m.status === 'completed' && !m.has_post_call,
+      })),
+    }));
+
+    const data = {
+      hasNext: next !== null,
+      next,
+      hasBuckets: buckets.length > 0,
+      buckets,
+    };
+
+    const template = loadTemplate('agenda');
+    const content = renderSimpleTemplate(template, data);
+    const html = renderLayout('Agenda', content);
     res.type('html').send(html);
   } catch (err) {
     next(err);

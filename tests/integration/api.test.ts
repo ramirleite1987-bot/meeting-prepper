@@ -386,6 +386,27 @@ describe('API Integration Tests', () => {
   });
 
   // ──────────────────────────────────────────────
+  // Agenda
+  // ──────────────────────────────────────────────
+
+  describe('Agenda', () => {
+    it('GET /api/agenda returns buckets and a next field', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      const future = new Date(Date.now() + 60 * 60_000).toISOString();
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m1', 'c1', 'Soon', future, 'scheduled');
+
+      const res = await request(app).get('/api/agenda').expect(200);
+      expect(res.body).toHaveProperty('buckets');
+      expect(res.body).toHaveProperty('next');
+      expect(res.body.next?.id).toBe('m1');
+    });
+  });
+
+  // ──────────────────────────────────────────────
   // Action items inbox
   // ──────────────────────────────────────────────
 

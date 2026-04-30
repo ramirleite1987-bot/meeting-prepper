@@ -12,6 +12,7 @@ import {
   updateStatus as updateActionItemStatus,
   isValidStatus,
 } from '../services/action-items.service.js';
+import { buildAgenda } from '../services/agenda.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -330,6 +331,17 @@ router.get(
   asyncHandler((_req, res) => {
     const notifications = notificationService.getRecentNotifications();
     res.json(notifications);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Agenda
+// ──────────────────────────────────────────────
+
+router.get(
+  '/agenda',
+  asyncHandler((_req, res) => {
+    res.json(buildAgenda());
   }),
 );
 
