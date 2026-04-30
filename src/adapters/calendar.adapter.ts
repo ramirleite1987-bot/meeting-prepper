@@ -19,9 +19,7 @@ interface CalendarEvent {
 function parseICSDate(value: string): Date {
   // Handle YYYYMMDDTHHMMSSZ and YYYYMMDDTHHMMSS formats
   const cleaned = value.replace(/[^0-9T]/g, '');
-  const match = cleaned.match(
-    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/,
-  );
+  const match = cleaned.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
   if (match) {
     const [, y, m, d, h, min, s] = match;
     const isUTC = value.endsWith('Z');

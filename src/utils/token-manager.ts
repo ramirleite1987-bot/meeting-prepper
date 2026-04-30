@@ -62,7 +62,8 @@ export class TokenManager {
       ? new Date(Date.now() + expiresInSeconds * 1000).toISOString()
       : null;
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO oauth_tokens (service, access_token, refresh_token, expires_at)
       VALUES (@service, @accessToken, @refreshToken, @expiresAt)
       ON CONFLICT(service) DO UPDATE SET
@@ -70,7 +71,8 @@ export class TokenManager {
         refresh_token = COALESCE(@refreshToken, oauth_tokens.refresh_token),
         expires_at = @expiresAt,
         updated_at = CURRENT_TIMESTAMP
-    `).run({
+    `,
+    ).run({
       service,
       accessToken,
       refreshToken: refreshToken ?? null,
@@ -96,9 +98,9 @@ export class TokenManager {
 
   private getStoredToken(service: string): TokenInfo | null {
     const db = getDb();
-    const row = db.prepare(
-      'SELECT * FROM oauth_tokens WHERE service = ?',
-    ).get(service) as StoredToken | undefined;
+    const row = db.prepare('SELECT * FROM oauth_tokens WHERE service = ?').get(service) as
+      | StoredToken
+      | undefined;
 
     if (!row) {
       return null;
@@ -136,12 +138,7 @@ export class TokenManager {
     try {
       log.info('Refreshing token', { service });
       const result = await refreshFn(refreshToken);
-      this.storeToken(
-        service,
-        result.accessToken,
-        result.refreshToken,
-        result.expiresInSeconds,
-      );
+      this.storeToken(service, result.accessToken, result.refreshToken, result.expiresInSeconds);
       return {
         accessToken: result.accessToken,
         refreshToken: result.refreshToken ?? refreshToken,
@@ -165,4 +162,11 @@ export class TokenManager {
   }
 }
 
+/**
+ * Process-wide singleton. Register refresh callbacks once at startup with
+ * `tokenManager.registerRefreshFunction(service, fn)`, then call
+ * `getValidToken(service)` from request paths. Tokens are persisted in
+ * SQLite; do NOT construct a second TokenManager instance — it would
+ * duplicate refresh logic and race on writes.
+ */
 export const tokenManager = new TokenManager();

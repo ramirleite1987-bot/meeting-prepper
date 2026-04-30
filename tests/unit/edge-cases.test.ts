@@ -56,8 +56,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getActionItemsByMeeting: () =>
       testDb.prepare('SELECT * FROM action_items WHERE meeting_id = ? ORDER BY created_at ASC'),
-    getActionItemByHash: () =>
-      testDb.prepare('SELECT * FROM action_items WHERE context_hash = ?'),
+    getActionItemByHash: () => testDb.prepare('SELECT * FROM action_items WHERE context_hash = ?'),
     updateMeetingPostCall: () =>
       testDb.prepare(
         "UPDATE meetings SET post_call_notes = @postCallNotes, status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = @id",
@@ -72,8 +71,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getLinearSyncByIssue: () =>
       testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
-    getLinearSyncByMeeting: () =>
-      testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    getLinearSyncByMeeting: () => testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
     updateLinearSyncStatus: () =>
       testDb.prepare(
         'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -136,7 +134,8 @@ vi.mock('../../src/adapters/linear.adapter.js', () => ({
 
 // Mock ReconciliationService
 vi.mock('../../src/services/reconciliation.service.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/services/reconciliation.service.js')>();
+  const original =
+    await importOriginal<typeof import('../../src/services/reconciliation.service.js')>();
   return {
     ...original,
     ReconciliationService: vi.fn().mockImplementation(() => ({
@@ -215,7 +214,9 @@ describe('Edge Cases', () => {
 
       // Seed a client and meeting so foreign key constraints are satisfied
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Test Client');
-      testDb.prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)').run('meeting-1', 'c1', 'Test Meeting', 'scheduled');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('meeting-1', 'c1', 'Test Meeting', 'scheduled');
 
       const failingAdapter = {
         name: 'failing-mcp',
@@ -268,15 +269,21 @@ describe('Edge Cases', () => {
 
     it('processing the same webhook twice results in idempotent state', async () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
-      testDb.prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
-      ).run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
-      testDb.prepare(
-        "INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run('ai-1', 'm1', 'krisp', 'Fix bug', 'hash-1', 'pending');
-      testDb.prepare(
-        "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run('sync-1', 'ai-1', 'm1', 'linear-issue-1', 'linear', 'synced');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('ai-1', 'm1', 'krisp', 'Fix bug', 'hash-1', 'pending');
+      testDb
+        .prepare(
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('sync-1', 'ai-1', 'm1', 'linear-issue-1', 'linear', 'synced');
 
       // Import SyncService and process the same event twice
       const { SyncService } = await import('../../src/services/sync.service.js');
@@ -378,9 +385,11 @@ describe('Edge Cases', () => {
       const { BriefingService } = await import('../../src/services/briefing.service.js');
 
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
-      testDb.prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
-      ).run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
 
       const service = new BriefingService();
       const briefing = await service.generateBriefing('m1', 'Acme', []);
@@ -390,9 +399,7 @@ describe('Edge Cases', () => {
       expect(briefing.sections.recommendedQuestions.items.length).toBeGreaterThan(0);
       // With sparse context, we should get helpful default questions
       expect(briefing.sections.recommendedQuestions.items).toEqual(
-        expect.arrayContaining([
-          expect.stringContaining('priorities'),
-        ]),
+        expect.arrayContaining([expect.stringContaining('priorities')]),
       );
     });
   });
@@ -499,30 +506,40 @@ describe('Edge Cases', () => {
   describe('Database constraint handling', () => {
     it('UNIQUE constraint on linear_sync prevents duplicate sync records', () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
-      testDb.prepare(
-        "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
-      ).run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
-      testDb.prepare(
-        "INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run('ai-1', 'm1', 'krisp', 'Fix bug', 'hash-1', 'pending');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('ai-1', 'm1', 'krisp', 'Fix bug', 'hash-1', 'pending');
 
-      testDb.prepare(
-        "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run('sync-1', 'ai-1', 'm1', 'linear-1', 'linear', 'synced');
+      testDb
+        .prepare(
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('sync-1', 'ai-1', 'm1', 'linear-1', 'linear', 'synced');
 
       // Duplicate should throw UNIQUE constraint error
       expect(() => {
-        testDb.prepare(
-          "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
-        ).run('sync-2', 'ai-1', 'm1', 'linear-1', 'linear', 'synced');
+        testDb
+          .prepare(
+            'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
+          )
+          .run('sync-2', 'ai-1', 'm1', 'linear-1', 'linear', 'synced');
       }).toThrow(/UNIQUE/);
     });
 
     it('foreign key constraint prevents orphaned meetings', () => {
       expect(() => {
-        testDb.prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
-        ).run('m1', 'nonexistent-client', 'Weekly', '2024-01-01', 'scheduled');
+        testDb
+          .prepare(
+            'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+          )
+          .run('m1', 'nonexistent-client', 'Weekly', '2024-01-01', 'scheduled');
       }).toThrow(/FOREIGN KEY/);
     });
   });

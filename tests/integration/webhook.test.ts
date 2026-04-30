@@ -35,8 +35,7 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getLinearSyncByIssue: () =>
       testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
-    getLinearSyncByMeeting: () =>
-      testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    getLinearSyncByMeeting: () => testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
     updateLinearSyncStatus: () =>
       testDb.prepare(
         'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -107,7 +106,8 @@ vi.mock('../../src/adapters/linear.adapter.js', () => ({
 
 // Mock ReconciliationService
 vi.mock('../../src/services/reconciliation.service.js', async (importOriginal) => {
-  const original = await importOriginal<typeof import('../../src/services/reconciliation.service.js')>();
+  const original =
+    await importOriginal<typeof import('../../src/services/reconciliation.service.js')>();
   return {
     ...original,
     ReconciliationService: vi.fn().mockImplementation(() => ({
@@ -136,17 +136,17 @@ function seedData(): void {
   testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
   testDb
     .prepare(
-      "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+      'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
     )
     .run('m1', 'c1', 'Weekly', '2024-01-01', 'scheduled');
   testDb
     .prepare(
-      "INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)",
+      'INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)',
     )
     .run('ai-1', 'm1', 'krisp', 'Fix bug', 'hash-1', 'pending');
   testDb
     .prepare(
-      "INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)",
+      'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
     )
     .run('sync-1', 'ai-1', 'm1', 'linear-issue-1', 'linear', 'synced');
 }

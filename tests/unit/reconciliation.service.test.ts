@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildContextHash, buildReconciliationKey } from '../../src/services/reconciliation.service.js';
+import {
+  buildContextHash,
+  buildReconciliationKey,
+} from '../../src/services/reconciliation.service.js';
 
 describe('ReconciliationService helpers', () => {
   describe('buildContextHash', () => {

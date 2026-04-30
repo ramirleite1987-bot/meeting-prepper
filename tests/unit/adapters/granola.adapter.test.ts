@@ -71,7 +71,13 @@ describe('GranolaAdapter', () => {
     it('should list meetings and return summaries', async () => {
       mockCallTool.mockResolvedValueOnce(
         mcpResponse([
-          { id: 'g1', title: 'Weekly Sync', date: '2025-01-10T14:00:00Z', attendees: ['Alice', 'Bob'], duration_minutes: 30 },
+          {
+            id: 'g1',
+            title: 'Weekly Sync',
+            date: '2025-01-10T14:00:00Z',
+            attendees: ['Alice', 'Bob'],
+            duration_minutes: 30,
+          },
           { id: 'g2', title: 'One-on-one', date: '2025-01-11T10:00:00Z', attendees: ['Charlie'] },
         ]),
       );
@@ -115,7 +121,13 @@ describe('GranolaAdapter', () => {
           key_points: ['Goal A met'],
           transcript: 'Full transcript...',
           action_items: [
-            { id: 'a1', title: 'Follow up on Goal B', assignee: 'Alice', priority: 'high', status: 'pending' },
+            {
+              id: 'a1',
+              title: 'Follow up on Goal B',
+              assignee: 'Alice',
+              priority: 'high',
+              status: 'pending',
+            },
           ],
         }),
       );
@@ -137,9 +149,7 @@ describe('GranolaAdapter', () => {
         mcpResponse({ id: 'g1', title: 'Meeting', summary: 'Notes' }),
       );
       // get_meeting_transcript
-      mockCallTool.mockResolvedValueOnce(
-        mcpResponse({ transcript: 'Fetched transcript' }),
-      );
+      mockCallTool.mockResolvedValueOnce(mcpResponse({ transcript: 'Fetched transcript' }));
 
       const notes = await adapter.getMeetingNotes('g1');
 
@@ -225,9 +235,10 @@ describe('GranolaAdapter', () => {
 
       (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve([
-          { id: 'r1', title: 'REST Meeting', date: '2025-01-01T10:00:00Z', attendees: [] },
-        ]),
+        json: () =>
+          Promise.resolve([
+            { id: 'r1', title: 'REST Meeting', date: '2025-01-01T10:00:00Z', attendees: [] },
+          ]),
       });
 
       const results = await restAdapter.searchMeetings('test');

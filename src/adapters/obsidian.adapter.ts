@@ -103,9 +103,7 @@ export class ObsidianAdapter implements IContextAdapter {
 
       const { data, body } = parseFrontmatter(raw);
 
-      const timestamp = data.date
-        ? new Date(data.date as string)
-        : new Date();
+      const timestamp = data.date ? new Date(data.date as string) : new Date();
 
       if (options?.since && timestamp < options.since) continue;
 

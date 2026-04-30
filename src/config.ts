@@ -13,12 +13,6 @@ const configSchema = z.object({
 
   calendarIcsUrl: z.string().url().optional(),
 
-  telegramBotToken: z.string().optional(),
-  telegramChatId: z.string().optional(),
-
-  githubToken: z.string().optional(),
-  githubRepos: z.string().optional(),
-
   krispMcpServerUrl: z.string().url().optional(),
 
   granolaMcpServerUrl: z.string().url().optional(),
@@ -39,10 +33,6 @@ function loadConfig(): Config {
     databasePath: process.env.DATABASE_PATH,
     obsidianVaultPath: process.env.OBSIDIAN_VAULT_PATH || undefined,
     calendarIcsUrl: process.env.CALENDAR_ICS_URL || undefined,
-    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || undefined,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID || undefined,
-    githubToken: process.env.GITHUB_TOKEN || undefined,
-    githubRepos: process.env.GITHUB_REPOS || undefined,
     krispMcpServerUrl: process.env.KRISP_MCP_SERVER_URL || undefined,
     granolaMcpServerUrl: process.env.GRANOLA_MCP_SERVER_URL || undefined,
     linearApiKey: process.env.LINEAR_API_KEY || undefined,
