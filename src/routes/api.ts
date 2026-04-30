@@ -6,6 +6,12 @@ import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
 import { SyncService } from '../services/sync.service.js';
 import { search as runSearch } from '../services/search.service.js';
+import {
+  listActionItems,
+  listOwners,
+  updateStatus as updateActionItemStatus,
+  isValidStatus,
+} from '../services/action-items.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -324,6 +330,51 @@ router.get(
   asyncHandler((_req, res) => {
     const notifications = notificationService.getRecentNotifications();
     res.json(notifications);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Action items (global)
+// ──────────────────────────────────────────────
+
+router.get(
+  '/action-items',
+  asyncHandler((req, res) => {
+    const { status, priority, owner, clientId, q } = req.query as {
+      status?: string;
+      priority?: string;
+      owner?: string;
+      clientId?: string;
+      q?: string;
+    };
+    const items = listActionItems({ status, priority, owner, clientId, q });
+    res.json({
+      total: items.length,
+      filters: { status, priority, owner, clientId, q },
+      items,
+    });
+  }),
+);
+
+router.get(
+  '/action-items/owners',
+  asyncHandler((_req, res) => {
+    res.json({ owners: listOwners() });
+  }),
+);
+
+router.patch(
+  '/action-items/:id/status',
+  asyncHandler((req, res) => {
+    const { status } = req.body as { status?: string };
+    if (!status || !isValidStatus(status)) {
+      throw createError("status must be one of 'pending', 'synced', 'completed'", 400);
+    }
+    const updated = updateActionItemStatus(param(req, 'id'), status);
+    if (!updated) {
+      throw createError('Action item not found', 404);
+    }
+    res.json(updated);
   }),
 );
 

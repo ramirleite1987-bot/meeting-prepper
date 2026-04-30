@@ -386,6 +386,110 @@ describe('API Integration Tests', () => {
   });
 
   // ──────────────────────────────────────────────
+  // Action items inbox
+  // ──────────────────────────────────────────────
+
+  describe('Action items inbox', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c2', 'Globex');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m1', 'c1', 'Acme weekly', 'completed');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m2', 'c2', 'Globex sync', 'completed');
+
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run('a1', 'm1', 'manual', 'Ship dashboard', 'Build it', 'alice', 'high', 'pending', 'h1');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run('a2', 'm1', 'manual', 'Update docs', null, 'bob', 'low', 'completed', 'h2');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run('a3', 'm2', 'manual', 'Renew contract', null, 'alice', 'medium', 'synced', 'h3');
+    });
+
+    it('GET /api/action-items returns all items joined with meeting + client', async () => {
+      const res = await request(app).get('/api/action-items').expect(200);
+      expect(res.body.total).toBe(3);
+      expect(res.body.items).toHaveLength(3);
+      const titles = res.body.items.map((i: { title: string }) => i.title).sort();
+      expect(titles).toEqual(['Renew contract', 'Ship dashboard', 'Update docs']);
+      expect(res.body.items[0]).toHaveProperty('client_name');
+      expect(res.body.items[0]).toHaveProperty('meeting_title');
+    });
+
+    it('GET /api/action-items filters by status', async () => {
+      const res = await request(app).get('/api/action-items?status=pending').expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].title).toBe('Ship dashboard');
+    });
+
+    it('GET /api/action-items filters by priority', async () => {
+      const res = await request(app).get('/api/action-items?priority=high').expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].id).toBe('a1');
+    });
+
+    it('GET /api/action-items filters by owner', async () => {
+      const res = await request(app).get('/api/action-items?owner=alice').expect(200);
+      expect(res.body.total).toBe(2);
+    });
+
+    it('GET /api/action-items combines filters', async () => {
+      const res = await request(app)
+        .get('/api/action-items?owner=alice&status=pending')
+        .expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].id).toBe('a1');
+    });
+
+    it('GET /api/action-items ignores invalid status', async () => {
+      const res = await request(app).get('/api/action-items?status=bogus').expect(200);
+      expect(res.body.total).toBe(3);
+    });
+
+    it('GET /api/action-items/owners returns distinct owners', async () => {
+      const res = await request(app).get('/api/action-items/owners').expect(200);
+      expect(res.body.owners).toEqual(['alice', 'bob']);
+    });
+
+    it('PATCH /api/action-items/:id/status updates status', async () => {
+      const res = await request(app)
+        .patch('/api/action-items/a1/status')
+        .send({ status: 'completed' })
+        .expect(200);
+      expect(res.body.status).toBe('completed');
+
+      const recheck = await request(app).get('/api/action-items?status=completed').expect(200);
+      expect(recheck.body.total).toBe(2);
+    });
+
+    it('PATCH /api/action-items/:id/status rejects invalid status', async () => {
+      const res = await request(app)
+        .patch('/api/action-items/a1/status')
+        .send({ status: 'in-flight' })
+        .expect(400);
+      expect(res.body.error).toMatch(/status must be/);
+    });
+
+    it('PATCH /api/action-items/:id/status returns 404 for unknown id', async () => {
+      await request(app)
+        .patch('/api/action-items/unknown/status')
+        .send({ status: 'completed' })
+        .expect(404);
+    });
+  });
+
+  // ──────────────────────────────────────────────
   // Search
   // ──────────────────────────────────────────────
 
