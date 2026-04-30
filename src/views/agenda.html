@@ -1,0 +1,77 @@
+<div class="space-y-6">
+  <header>
+    <h1 class="text-2xl font-bold text-gray-900">Agenda</h1>
+    <p class="text-sm text-gray-500 mt-1">Your upcoming meetings, grouped by when they happen.</p>
+  </header>
+
+  {{#if hasNext}}
+    <section class="rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white p-6 shadow-md">
+      <div class="text-xs uppercase tracking-wide font-semibold opacity-80">Up next</div>
+      <div class="mt-1 flex flex-wrap items-baseline justify-between gap-3">
+        <h2 class="text-2xl font-bold">{{next.title}}</h2>
+        <span class="text-sm font-medium bg-white/20 rounded-full px-3 py-1">{{next.starts_in_label}}</span>
+      </div>
+      <div class="text-sm opacity-90 mt-1">{{next.client_name}} · {{next.scheduled_label}}</div>
+      <div class="mt-4 flex gap-2">
+        <a href="/briefing/{{next.id}}" class="inline-block px-4 py-2 bg-white text-indigo-700 rounded-md text-sm font-medium hover:bg-indigo-50">View briefing</a>
+        {{#if next.has_briefing}}{{else}}
+          <form method="post" action="/briefing/prepare" class="inline-block">
+            <input type="hidden" name="meetingId" value="{{next.id}}" />
+            <button type="submit" class="px-4 py-2 bg-white/20 border border-white/40 text-white rounded-md text-sm font-medium hover:bg-white/30">Prepare briefing</button>
+          </form>
+        {{/if}}
+      </div>
+    </section>
+  {{/if}}
+
+  {{#if hasBuckets}}
+    {{#each buckets}}
+      <section>
+        <h2 class="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <span>{{this.label}}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{this.count}}</span>
+        </h2>
+        <ul class="rounded-lg border {{this.colorClass}} divide-y divide-gray-100 overflow-hidden">
+          {{#each this.meetings}}
+            <li class="p-4 flex items-start gap-4 bg-white/60">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <a href="/briefing/{{this.id}}" class="font-medium text-indigo-600 hover:underline">{{this.title}}</a>
+                  <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">{{this.status}}</span>
+                  {{#if this.has_briefing}}
+                    <span class="text-xs px-2 py-0.5 rounded bg-green-100 text-green-800">briefed</span>
+                  {{/if}}
+                  {{#if this.has_post_call}}
+                    <span class="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-800">post-call</span>
+                  {{/if}}
+                </div>
+                <div class="text-sm text-gray-500 mt-0.5">
+                  {{this.client_name}} · {{this.scheduled_label}}
+                  {{#if this.starts_in_label}} · {{this.starts_in_label}}{{/if}}
+                </div>
+              </div>
+              <div class="shrink-0 flex flex-col gap-2 items-end text-right">
+                {{#if this.needs_briefing}}
+                  <form method="post" action="/briefing/prepare">
+                    <input type="hidden" name="meetingId" value="{{this.id}}" />
+                    <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Prepare</button>
+                  </form>
+                {{/if}}
+                {{#if this.needs_post_call}}
+                  <a href="/post-call/{{this.id}}" class="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-md hover:bg-gray-50">Review</a>
+                {{/if}}
+                {{#if this.has_post_call}}
+                  <a href="/post-call/{{this.id}}" class="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-md hover:bg-gray-50">Post-call</a>
+                {{/if}}
+              </div>
+            </li>
+          {{/each}}
+        </ul>
+      </section>
+    {{/each}}
+  {{else}}
+    <div class="bg-white border border-gray-200 rounded-lg p-8 text-center text-gray-500">
+      No meetings yet. Add a meeting from the dashboard to see it here.
+    </div>
+  {{/if}}
+</div>

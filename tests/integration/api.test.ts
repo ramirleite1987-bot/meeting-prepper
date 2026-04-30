@@ -386,6 +386,300 @@ describe('API Integration Tests', () => {
   });
 
   // ──────────────────────────────────────────────
+  // Stats
+  // ──────────────────────────────────────────────
+
+  describe('Stats', () => {
+    it('GET /api/stats returns the full payload shape', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m1', 'c1', 'M1', 'completed');
+
+      const res = await request(app).get('/api/stats').expect(200);
+      expect(res.body.clients.total).toBe(1);
+      expect(res.body.meetings.total).toBe(1);
+      expect(res.body).toHaveProperty('topClients');
+      expect(res.body).toHaveProperty('topOwners');
+      expect(res.body).toHaveProperty('averages');
+      expect(res.body).toHaveProperty('linearSync');
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Briefing markdown export
+  // ──────────────────────────────────────────────
+
+  describe('Briefing markdown export', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status, briefing) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'm1',
+          'c1',
+          'Quarterly review',
+          '2026-05-01T10:00:00Z',
+          'scheduled',
+          JSON.stringify({
+            executiveSummary: 'Annual planning sync.',
+            keyTopics: ['Roadmap', 'Hiring'],
+          }),
+        );
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m2', 'c1', 'No briefing yet', 'scheduled');
+    });
+
+    it('GET /api/meetings/:id/briefing.md returns markdown with attachment header', async () => {
+      const res = await request(app).get('/api/meetings/m1/briefing.md').expect(200);
+      expect(res.headers['content-type']).toMatch(/text\/markdown/);
+      expect(res.headers['content-disposition']).toMatch(/attachment/);
+      expect(res.headers['content-disposition']).toMatch(/quarterly-review/);
+      expect(res.text).toContain('# Quarterly review');
+      expect(res.text).toContain('**Client:** Acme');
+      expect(res.text).toContain('## Executive Summary');
+      expect(res.text).toContain('## Key Topics');
+      expect(res.text).toContain('- Roadmap');
+    });
+
+    it('GET /api/meetings/:id/briefing.md?inline=1 sets inline disposition', async () => {
+      const res = await request(app).get('/api/meetings/m1/briefing.md?inline=1').expect(200);
+      expect(res.headers['content-disposition']).toMatch(/inline/);
+    });
+
+    it('GET /api/meetings/:id/briefing.md returns 404 when no briefing exists', async () => {
+      await request(app).get('/api/meetings/m2/briefing.md').expect(404);
+    });
+
+    it('GET /api/meetings/:id/briefing.md returns 404 for unknown meeting', async () => {
+      await request(app).get('/api/meetings/nope/briefing.md').expect(404);
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Agenda
+  // ──────────────────────────────────────────────
+
+  describe('Agenda', () => {
+    it('GET /api/agenda returns buckets and a next field', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      const future = new Date(Date.now() + 60 * 60_000).toISOString();
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m1', 'c1', 'Soon', future, 'scheduled');
+
+      const res = await request(app).get('/api/agenda').expect(200);
+      expect(res.body).toHaveProperty('buckets');
+      expect(res.body).toHaveProperty('next');
+      expect(res.body.next?.id).toBe('m1');
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Action items inbox
+  // ──────────────────────────────────────────────
+
+  describe('Action items inbox', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c2', 'Globex');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m1', 'c1', 'Acme weekly', 'completed');
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m2', 'c2', 'Globex sync', 'completed');
+
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run('a1', 'm1', 'manual', 'Ship dashboard', 'Build it', 'alice', 'high', 'pending', 'h1');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run('a2', 'm1', 'manual', 'Update docs', null, 'bob', 'low', 'completed', 'h2');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run('a3', 'm2', 'manual', 'Renew contract', null, 'alice', 'medium', 'synced', 'h3');
+    });
+
+    it('GET /api/action-items returns all items joined with meeting + client', async () => {
+      const res = await request(app).get('/api/action-items').expect(200);
+      expect(res.body.total).toBe(3);
+      expect(res.body.items).toHaveLength(3);
+      const titles = res.body.items.map((i: { title: string }) => i.title).sort();
+      expect(titles).toEqual(['Renew contract', 'Ship dashboard', 'Update docs']);
+      expect(res.body.items[0]).toHaveProperty('client_name');
+      expect(res.body.items[0]).toHaveProperty('meeting_title');
+    });
+
+    it('GET /api/action-items filters by status', async () => {
+      const res = await request(app).get('/api/action-items?status=pending').expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].title).toBe('Ship dashboard');
+    });
+
+    it('GET /api/action-items filters by priority', async () => {
+      const res = await request(app).get('/api/action-items?priority=high').expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].id).toBe('a1');
+    });
+
+    it('GET /api/action-items filters by owner', async () => {
+      const res = await request(app).get('/api/action-items?owner=alice').expect(200);
+      expect(res.body.total).toBe(2);
+    });
+
+    it('GET /api/action-items combines filters', async () => {
+      const res = await request(app)
+        .get('/api/action-items?owner=alice&status=pending')
+        .expect(200);
+      expect(res.body.total).toBe(1);
+      expect(res.body.items[0].id).toBe('a1');
+    });
+
+    it('GET /api/action-items ignores invalid status', async () => {
+      const res = await request(app).get('/api/action-items?status=bogus').expect(200);
+      expect(res.body.total).toBe(3);
+    });
+
+    it('GET /api/action-items/owners returns distinct owners', async () => {
+      const res = await request(app).get('/api/action-items/owners').expect(200);
+      expect(res.body.owners).toEqual(['alice', 'bob']);
+    });
+
+    it('PATCH /api/action-items/:id/status updates status', async () => {
+      const res = await request(app)
+        .patch('/api/action-items/a1/status')
+        .send({ status: 'completed' })
+        .expect(200);
+      expect(res.body.status).toBe('completed');
+
+      const recheck = await request(app).get('/api/action-items?status=completed').expect(200);
+      expect(recheck.body.total).toBe(2);
+    });
+
+    it('PATCH /api/action-items/:id/status rejects invalid status', async () => {
+      const res = await request(app)
+        .patch('/api/action-items/a1/status')
+        .send({ status: 'in-flight' })
+        .expect(400);
+      expect(res.body.error).toMatch(/status must be/);
+    });
+
+    it('PATCH /api/action-items/:id/status returns 404 for unknown id', async () => {
+      await request(app)
+        .patch('/api/action-items/unknown/status')
+        .send({ status: 'completed' })
+        .expect(404);
+    });
+  });
+
+  // ──────────────────────────────────────────────
+  // Search
+  // ──────────────────────────────────────────────
+
+  describe('Search', () => {
+    beforeEach(() => {
+      testDb
+        .prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)')
+        .run('c1', 'Acme Corp', 'Project Apollo');
+      testDb
+        .prepare('INSERT INTO clients (id, name, project) VALUES (?, ?, ?)')
+        .run('c2', 'Globex', 'Saturn');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status, briefing) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'm1',
+          'c1',
+          'Apollo kickoff sync',
+          '2026-04-30T10:00:00Z',
+          'scheduled',
+          JSON.stringify({ summary: 'Discuss launch plan for Apollo release' }),
+        );
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m2', 'c2', 'Saturn weekly', '2026-04-30T11:00:00Z', 'scheduled');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'a1',
+          'm1',
+          'manual',
+          'Ship Apollo dashboard',
+          'Build the new analytics dashboard for the Apollo project',
+          'alice',
+          'high',
+          'pending',
+          'hash-1',
+        );
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, status, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'a2',
+          'm2',
+          'manual',
+          'Renew Saturn contract',
+          null,
+          'bob',
+          'medium',
+          'pending',
+          'hash-2',
+        );
+    });
+
+    it('GET /api/search returns matches across clients, meetings, and action items', async () => {
+      const res = await request(app).get('/api/search?q=apollo').expect(200);
+
+      expect(res.body.query).toBe('apollo');
+      expect(res.body.total).toBeGreaterThanOrEqual(3);
+      expect(res.body.counts.clients).toBeGreaterThanOrEqual(1);
+      expect(res.body.counts.meetings).toBeGreaterThanOrEqual(1);
+      expect(res.body.counts.action_items).toBeGreaterThanOrEqual(1);
+
+      const types = res.body.results.map((r: { type: string }) => r.type);
+      expect(types).toContain('client');
+      expect(types).toContain('meeting');
+      expect(types).toContain('action_item');
+    });
+
+    it('GET /api/search returns empty result for empty query', async () => {
+      const res = await request(app).get('/api/search?q=').expect(200);
+      expect(res.body.total).toBe(0);
+      expect(res.body.results).toEqual([]);
+    });
+
+    it('GET /api/search matches action item owner', async () => {
+      const res = await request(app).get('/api/search?q=alice').expect(200);
+      const actionHits = res.body.results.filter((r: { type: string }) => r.type === 'action_item');
+      expect(actionHits.length).toBeGreaterThanOrEqual(1);
+      expect(actionHits[0].title).toBe('Ship Apollo dashboard');
+    });
+
+    it('GET /api/search escapes LIKE wildcards in user input', async () => {
+      const res = await request(app).get('/api/search?q=%25').expect(200);
+      expect(res.body.total).toBe(0);
+    });
+  });
+
+  // ──────────────────────────────────────────────
   // Error responses
   // ──────────────────────────────────────────────
 

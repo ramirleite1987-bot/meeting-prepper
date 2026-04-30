@@ -4,6 +4,15 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { queries } from '../db/index.js';
 import { clientContextService, briefingService } from './api.js';
+import { search as runSearch } from '../services/search.service.js';
+import {
+  listActionItems,
+  listOwners,
+  isValidStatus,
+  updateStatus as updateActionItemStatusFn,
+} from '../services/action-items.service.js';
+import { buildAgenda } from '../services/agenda.service.js';
+import { buildStats } from '../services/stats.service.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -112,6 +121,259 @@ router.get('/', (_req: Request, res: Response, next: NextFunction) => {
     const template = loadTemplate('dashboard');
     const content = renderSimpleTemplate(template, { meetings, clients });
     const html = renderLayout('Dashboard', content);
+
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Stats view
+// ──────────────────────────────────────────────
+
+router.get('/stats', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const stats = buildStats();
+    const data = {
+      ...stats,
+      hasTopClients: stats.topClients.length > 0,
+      hasTopOwners: stats.topOwners.length > 0,
+      avgDisplay:
+        stats.averages.actionItemsPerCompletedMeeting === null
+          ? '—'
+          : String(stats.averages.actionItemsPerCompletedMeeting),
+    };
+    const template = loadTemplate('stats');
+    const content = renderSimpleTemplate(template, data);
+    const html = renderLayout('Stats', content);
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Agenda view
+// ──────────────────────────────────────────────
+
+function formatStartsIn(minutes: number | null): string {
+  if (minutes === null) return '';
+  const abs = Math.abs(minutes);
+  const sign = minutes < 0 ? 'ago' : '';
+  if (abs < 60) return `in ${minutes} min`.replace('in -', `${abs} min ${sign} `).trim();
+  const hours = Math.round(abs / 60);
+  if (hours < 24) return minutes < 0 ? `${hours}h ago` : `in ${hours}h`;
+  const days = Math.round(hours / 24);
+  return minutes < 0 ? `${days}d ago` : `in ${days}d`;
+}
+
+function bucketColor(bucket: string): string {
+  switch (bucket) {
+    case 'overdue':
+      return 'bg-red-50 border-red-200';
+    case 'today':
+      return 'bg-indigo-50 border-indigo-200';
+    case 'tomorrow':
+      return 'bg-blue-50 border-blue-200';
+    case 'this_week':
+      return 'bg-white border-gray-200';
+    case 'later':
+      return 'bg-white border-gray-200';
+    default:
+      return 'bg-gray-50 border-gray-200';
+  }
+}
+
+router.get('/agenda', (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const agenda = buildAgenda();
+
+    const next = agenda.next
+      ? {
+          ...agenda.next,
+          starts_in_label: formatStartsIn(agenda.next.starts_in_minutes),
+          scheduled_label: agenda.next.scheduled_at
+            ? new Date(agenda.next.scheduled_at).toLocaleString()
+            : 'Unscheduled',
+          client_name: agenda.next.client_name ?? '—',
+        }
+      : null;
+
+    const buckets = agenda.buckets.map((b) => ({
+      ...b,
+      colorClass: bucketColor(b.bucket),
+      meetings: b.meetings.map((m) => ({
+        ...m,
+        scheduled_label: m.scheduled_at ? new Date(m.scheduled_at).toLocaleString() : 'Unscheduled',
+        starts_in_label: formatStartsIn(m.starts_in_minutes),
+        client_name: m.client_name ?? '—',
+        is_completed: m.status === 'completed',
+        needs_briefing: !m.has_briefing && m.status !== 'completed',
+        needs_post_call: m.status === 'completed' && !m.has_post_call,
+      })),
+    }));
+
+    const data = {
+      hasNext: next !== null,
+      next,
+      hasBuckets: buckets.length > 0,
+      buckets,
+    };
+
+    const template = loadTemplate('agenda');
+    const content = renderSimpleTemplate(template, data);
+    const html = renderLayout('Agenda', content);
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Action items inbox view
+// ──────────────────────────────────────────────
+
+function priorityClass(priority: string | null | undefined): string {
+  if (priority === 'high') return 'bg-red-100 text-red-800';
+  if (priority === 'low') return 'bg-green-100 text-green-800';
+  return 'bg-yellow-100 text-yellow-800';
+}
+
+function statusClass(status: string | null | undefined): string {
+  if (status === 'completed') return 'bg-green-100 text-green-800';
+  if (status === 'synced') return 'bg-blue-100 text-blue-800';
+  return 'bg-gray-100 text-gray-700';
+}
+
+router.get('/action-items', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const filters = {
+      status: (req.query.status as string | undefined) ?? '',
+      priority: (req.query.priority as string | undefined) ?? '',
+      owner: (req.query.owner as string | undefined) ?? '',
+      clientId: (req.query.clientId as string | undefined) ?? '',
+      q: ((req.query.q as string | undefined) ?? '').slice(0, 200),
+    };
+
+    const items = listActionItems(filters).map((item) => ({
+      ...item,
+      owner: item.owner ?? 'Unassigned',
+      description: item.description ?? '',
+      meeting_title: item.meeting_title ?? 'Unknown meeting',
+      client_name: item.client_name ?? '—',
+      deadline_display: item.deadline ? new Date(item.deadline).toLocaleDateString() : '',
+      priorityClass: priorityClass(item.priority),
+      statusClass: statusClass(item.status),
+      isCompleted: item.status === 'completed',
+      nextStatus: item.status === 'completed' ? 'pending' : 'completed',
+      nextStatusLabel: item.status === 'completed' ? 'Reopen' : 'Mark done',
+    }));
+
+    const owners = listOwners();
+    const counts = {
+      total: items.length,
+      pending: items.filter((i) => i.status === 'pending').length,
+      synced: items.filter((i) => i.status === 'synced').length,
+      completed: items.filter((i) => i.status === 'completed').length,
+      high: items.filter((i) => i.priority === 'high').length,
+    };
+
+    const data = {
+      filters,
+      items,
+      owners: owners.map((o) => ({ value: o, selected: o === filters.owner })),
+      counts,
+      hasItems: items.length > 0,
+      isStatusPending: filters.status === 'pending',
+      isStatusSynced: filters.status === 'synced',
+      isStatusCompleted: filters.status === 'completed',
+      isStatusAll: !filters.status,
+      isPriorityHigh: filters.priority === 'high',
+      isPriorityMedium: filters.priority === 'medium',
+      isPriorityLow: filters.priority === 'low',
+      isPriorityAll: !filters.priority,
+    };
+
+    const template = loadTemplate('action-items');
+    const content = renderSimpleTemplate(template, data);
+    const html = renderLayout('Action items', content);
+    res.type('html').send(html);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/action-items/:id/status', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const status = (req.body as { status?: string }).status;
+    if (!status || !isValidStatus(status)) {
+      res.redirect('/action-items');
+      return;
+    }
+    updateActionItemStatusFn(param(req, 'id'), status);
+    const back = (req.body as { redirect?: string }).redirect ?? '/action-items';
+    res.redirect(back);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ──────────────────────────────────────────────
+// Search view
+// ──────────────────────────────────────────────
+
+router.get('/search', (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = ((req.query.q as string | undefined) ?? '').slice(0, 200);
+    const data = runSearch(q);
+
+    const grouped = {
+      query: data.query,
+      total: data.total,
+      hasQuery: data.query.length > 0,
+      hasResults: data.total > 0,
+      counts: data.counts,
+      clients: data.results
+        .filter((r) => r.type === 'client')
+        .map((r) => ({ ...r, snippet: r.snippet })),
+      meetings: data.results
+        .filter((r) => r.type === 'meeting')
+        .map((r) => ({
+          ...r,
+          status: (r.meta as { status?: string }).status ?? '',
+          clientName: (r.meta as { clientName?: string | null }).clientName ?? '—',
+        })),
+      actionItems: data.results
+        .filter((r) => r.type === 'action_item')
+        .map((r) => {
+          const meta = r.meta as {
+            owner?: string | null;
+            priority?: string;
+            status?: string;
+            clientName?: string | null;
+            meetingTitle?: string | null;
+          };
+          return {
+            ...r,
+            owner: meta.owner ?? 'Unassigned',
+            priority: meta.priority ?? 'medium',
+            status: meta.status ?? 'pending',
+            clientName: meta.clientName ?? '—',
+            meetingTitle: meta.meetingTitle ?? '',
+            priorityClass:
+              meta.priority === 'high'
+                ? 'bg-red-100 text-red-800'
+                : meta.priority === 'low'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800',
+          };
+        }),
+    };
+
+    const template = loadTemplate('search');
+    const content = renderSimpleTemplate(template, grouped);
+    const html = renderLayout(`Search${data.query ? ` — ${data.query}` : ''}`, content);
 
     res.type('html').send(html);
   } catch (err) {

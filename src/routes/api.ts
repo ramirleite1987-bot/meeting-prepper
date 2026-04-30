@@ -5,6 +5,16 @@ import { BriefingService } from '../services/briefing.service.js';
 import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
 import { SyncService } from '../services/sync.service.js';
+import { search as runSearch } from '../services/search.service.js';
+import {
+  listActionItems,
+  listOwners,
+  updateStatus as updateActionItemStatus,
+  isValidStatus,
+} from '../services/action-items.service.js';
+import { buildAgenda } from '../services/agenda.service.js';
+import { formatBriefingAsMarkdown } from '../services/briefing-export.service.js';
+import { buildStats } from '../services/stats.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -197,6 +207,58 @@ router.get(
   }),
 );
 
+router.get(
+  '/meetings/:id/briefing.md',
+  asyncHandler((req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+    if (!meeting.briefing) {
+      throw createError('No briefing generated yet', 404);
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(meeting.briefing as string);
+    } catch {
+      throw createError('Briefing data is corrupted', 500);
+    }
+
+    const client = queries.getClientById().get(meeting.client_id as string) as
+      | { name?: string }
+      | undefined;
+
+    const md = formatBriefingAsMarkdown(
+      {
+        id: meeting.id as string,
+        title: meeting.title as string,
+        client_name: client?.name ?? null,
+        scheduled_at: (meeting.scheduled_at as string | null) ?? null,
+        status: (meeting.status as string) ?? 'scheduled',
+      },
+      parsed,
+    );
+
+    const safeTitle = (meeting.title as string)
+      .replace(/[^a-zA-Z0-9-_ ]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .toLowerCase();
+    const filename = `briefing-${safeTitle || meeting.id}.md`;
+    const inline = req.query.inline === '1';
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `${inline ? 'inline' : 'attachment'}; filename="${filename}"`,
+    );
+    res.send(md);
+  }),
+);
+
 // ──────────────────────────────────────────────
 // Post-Call Extraction
 // ──────────────────────────────────────────────
@@ -323,6 +385,86 @@ router.get(
   asyncHandler((_req, res) => {
     const notifications = notificationService.getRecentNotifications();
     res.json(notifications);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Stats
+// ──────────────────────────────────────────────
+
+router.get(
+  '/stats',
+  asyncHandler((_req, res) => {
+    res.json(buildStats());
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Agenda
+// ──────────────────────────────────────────────
+
+router.get(
+  '/agenda',
+  asyncHandler((_req, res) => {
+    res.json(buildAgenda());
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Action items (global)
+// ──────────────────────────────────────────────
+
+router.get(
+  '/action-items',
+  asyncHandler((req, res) => {
+    const { status, priority, owner, clientId, q } = req.query as {
+      status?: string;
+      priority?: string;
+      owner?: string;
+      clientId?: string;
+      q?: string;
+    };
+    const items = listActionItems({ status, priority, owner, clientId, q });
+    res.json({
+      total: items.length,
+      filters: { status, priority, owner, clientId, q },
+      items,
+    });
+  }),
+);
+
+router.get(
+  '/action-items/owners',
+  asyncHandler((_req, res) => {
+    res.json({ owners: listOwners() });
+  }),
+);
+
+router.patch(
+  '/action-items/:id/status',
+  asyncHandler((req, res) => {
+    const { status } = req.body as { status?: string };
+    if (!status || !isValidStatus(status)) {
+      throw createError("status must be one of 'pending', 'synced', 'completed'", 400);
+    }
+    const updated = updateActionItemStatus(param(req, 'id'), status);
+    if (!updated) {
+      throw createError('Action item not found', 404);
+    }
+    res.json(updated);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Search
+// ──────────────────────────────────────────────
+
+router.get(
+  '/search',
+  asyncHandler((req, res) => {
+    const q = (req.query.q as string | undefined) ?? '';
+    const result = runSearch(q);
+    res.json(result);
   }),
 );
 
