@@ -1,10 +1,24 @@
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
+  <div class="flex items-start justify-between gap-4 flex-wrap">
     <div>
       <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Back to Dashboard</a>
       <h1 class="text-2xl font-bold text-gray-900 mt-2">{{meeting.title}}</h1>
       <p class="text-gray-500">{{meeting.client_name}} &middot; {{meeting.scheduled_at}}</p>
     </div>
+    {{#if briefing}}
+    <div class="flex gap-2">
+      <a
+        href="/api/meetings/{{meeting.id}}/briefing.md?inline=1"
+        target="_blank"
+        rel="noopener"
+        class="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-md hover:bg-gray-50"
+      >View as Markdown</a>
+      <a
+        href="/api/meetings/{{meeting.id}}/briefing.md"
+        class="px-3 py-1.5 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+      >Download .md</a>
+    </div>
+    {{/if}}
   </div>
 
   {{#if briefing}}

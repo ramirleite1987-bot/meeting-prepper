@@ -386,6 +386,59 @@ describe('API Integration Tests', () => {
   });
 
   // ──────────────────────────────────────────────
+  // Briefing markdown export
+  // ──────────────────────────────────────────────
+
+  describe('Briefing markdown export', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status, briefing) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'm1',
+          'c1',
+          'Quarterly review',
+          '2026-05-01T10:00:00Z',
+          'scheduled',
+          JSON.stringify({
+            executiveSummary: 'Annual planning sync.',
+            keyTopics: ['Roadmap', 'Hiring'],
+          }),
+        );
+      testDb
+        .prepare('INSERT INTO meetings (id, client_id, title, status) VALUES (?, ?, ?, ?)')
+        .run('m2', 'c1', 'No briefing yet', 'scheduled');
+    });
+
+    it('GET /api/meetings/:id/briefing.md returns markdown with attachment header', async () => {
+      const res = await request(app).get('/api/meetings/m1/briefing.md').expect(200);
+      expect(res.headers['content-type']).toMatch(/text\/markdown/);
+      expect(res.headers['content-disposition']).toMatch(/attachment/);
+      expect(res.headers['content-disposition']).toMatch(/quarterly-review/);
+      expect(res.text).toContain('# Quarterly review');
+      expect(res.text).toContain('**Client:** Acme');
+      expect(res.text).toContain('## Executive Summary');
+      expect(res.text).toContain('## Key Topics');
+      expect(res.text).toContain('- Roadmap');
+    });
+
+    it('GET /api/meetings/:id/briefing.md?inline=1 sets inline disposition', async () => {
+      const res = await request(app).get('/api/meetings/m1/briefing.md?inline=1').expect(200);
+      expect(res.headers['content-disposition']).toMatch(/inline/);
+    });
+
+    it('GET /api/meetings/:id/briefing.md returns 404 when no briefing exists', async () => {
+      await request(app).get('/api/meetings/m2/briefing.md').expect(404);
+    });
+
+    it('GET /api/meetings/:id/briefing.md returns 404 for unknown meeting', async () => {
+      await request(app).get('/api/meetings/nope/briefing.md').expect(404);
+    });
+  });
+
+  // ──────────────────────────────────────────────
   // Agenda
   // ──────────────────────────────────────────────
 

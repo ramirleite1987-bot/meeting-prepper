@@ -13,6 +13,7 @@ import {
   isValidStatus,
 } from '../services/action-items.service.js';
 import { buildAgenda } from '../services/agenda.service.js';
+import { formatBriefingAsMarkdown } from '../services/briefing-export.service.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -202,6 +203,58 @@ router.get(
     } catch {
       throw createError('Briefing data is corrupted', 500);
     }
+  }),
+);
+
+router.get(
+  '/meetings/:id/briefing.md',
+  asyncHandler((req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+    if (!meeting.briefing) {
+      throw createError('No briefing generated yet', 404);
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(meeting.briefing as string);
+    } catch {
+      throw createError('Briefing data is corrupted', 500);
+    }
+
+    const client = queries.getClientById().get(meeting.client_id as string) as
+      | { name?: string }
+      | undefined;
+
+    const md = formatBriefingAsMarkdown(
+      {
+        id: meeting.id as string,
+        title: meeting.title as string,
+        client_name: client?.name ?? null,
+        scheduled_at: (meeting.scheduled_at as string | null) ?? null,
+        status: (meeting.status as string) ?? 'scheduled',
+      },
+      parsed,
+    );
+
+    const safeTitle = (meeting.title as string)
+      .replace(/[^a-zA-Z0-9-_ ]/g, '')
+      .trim()
+      .replace(/\s+/g, '-')
+      .toLowerCase();
+    const filename = `briefing-${safeTitle || meeting.id}.md`;
+    const inline = req.query.inline === '1';
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `${inline ? 'inline' : 'attachment'}; filename="${filename}"`,
+    );
+    res.send(md);
   }),
 );
 
