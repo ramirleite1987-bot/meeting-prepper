@@ -7,35 +7,7 @@
 import { LinearClient } from '@linear/sdk';
 import type { ITaskAdapter, ActionItem, TaskReference, TaskStatus } from './types.js';
 import { TokenBucket, withRateLimitedRetry } from './linear-rate-limiter.js';
-
-/** Map Linear workflow state names to internal TaskStatus */
-function mapLinearState(stateName: string): TaskStatus {
-  const lower = stateName.toLowerCase();
-  if (lower.includes('backlog')) return 'backlog';
-  if (lower.includes('todo') || lower.includes('to do')) return 'todo';
-  if (lower.includes('in progress') || lower.includes('started')) return 'in-progress';
-  if (lower.includes('review') || lower.includes('in review')) return 'in-review';
-  if (lower.includes('done') || lower.includes('completed')) return 'done';
-  if (lower.includes('cancel')) return 'cancelled';
-  return 'todo';
-}
-
-/** Map internal priority to Linear priority number (0=none, 1=urgent, 2=high, 3=medium, 4=low) */
-function mapPriorityToLinear(priority?: ActionItem['priority']): number {
-  switch (priority) {
-    case 'urgent':
-      return 1;
-    case 'high':
-      return 2;
-    case 'medium':
-      return 3;
-    case 'low':
-      return 4;
-    case 'none':
-    default:
-      return 0;
-  }
-}
+import { mapLinearStateToTaskStatus, mapPriorityToLinear } from './linear-status.js';
 
 export class LinearAdapter implements ITaskAdapter {
   readonly name = 'linear';
@@ -198,7 +170,7 @@ export class LinearAdapter implements ITaskAdapter {
   private async getIssueStatus(issueId: string): Promise<TaskStatus> {
     const issue = await this.withRetry(() => this.client!.issue(issueId));
     const state = await issue.state;
-    return state ? mapLinearState(state.name) : 'todo';
+    return state ? mapLinearStateToTaskStatus(state.name) : 'todo';
   }
 
   /**

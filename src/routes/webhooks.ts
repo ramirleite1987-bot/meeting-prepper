@@ -3,7 +3,7 @@ import { webhookVerify } from '../middleware/webhook-verify.js';
 import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
 import { notificationService } from '../services/notification.service.js';
-import type { TaskStatus } from '../adapters/types.js';
+import { mapLinearStateToTaskStatus } from '../adapters/linear-status.js';
 
 const router = Router();
 const syncService = new SyncService();
@@ -19,20 +19,6 @@ interface LinearWebhookPayload {
   };
 }
 
-/** Map Linear state names to internal TaskStatus values. */
-function mapLinearStatus(stateName: string): TaskStatus {
-  const map: Record<string, TaskStatus> = {
-    Backlog: 'backlog',
-    Todo: 'todo',
-    'In Progress': 'in-progress',
-    'In Review': 'in-review',
-    Done: 'done',
-    Cancelled: 'cancelled',
-    Canceled: 'cancelled',
-  };
-  return map[stateName] ?? 'todo';
-}
-
 router.post('/linear', webhookVerify, (req: Request, res: Response) => {
   res.sendStatus(200);
 
@@ -46,7 +32,7 @@ router.post('/linear', webhookVerify, (req: Request, res: Response) => {
 
     const statusName = payload.data.state?.name ?? 'Todo';
 
-    const mappedStatus = mapLinearStatus(statusName);
+    const mappedStatus = mapLinearStateToTaskStatus(statusName);
 
     syncService
       .handleLinearUpdate({
