@@ -6,6 +6,7 @@
 
 import { LinearClient } from '@linear/sdk';
 import type { ITaskAdapter, ActionItem, TaskReference, TaskStatus } from './types.js';
+import { TokenBucket, withRateLimitedRetry } from './linear-rate-limiter.js';
 
 /** Map Linear workflow state names to internal TaskStatus */
 function mapLinearState(stateName: string): TaskStatus {
@@ -41,6 +42,7 @@ export class LinearAdapter implements ITaskAdapter {
 
   private client: LinearClient | null = null;
   private teamId: string | null = null;
+  private readonly rateLimiter = new TokenBucket();
 
   async initialize(): Promise<void> {
     const apiKey = process.env.LINEAR_API_KEY;
@@ -199,21 +201,12 @@ export class LinearAdapter implements ITaskAdapter {
     return state ? mapLinearState(state.name) : 'todo';
   }
 
+  /**
+   * Run an operation against Linear with local pre-throttle and
+   * Retry-After-aware retry on 429s. See `linear-rate-limiter.ts`
+   * for the underlying implementation.
+   */
   private async withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (error: unknown) {
-        lastError = error;
-        const isRateLimit = error instanceof Error && error.message.includes('rate limit');
-        if (!isRateLimit || attempt === maxRetries - 1) {
-          throw error;
-        }
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-    throw lastError;
+    return withRateLimitedRetry(fn, { maxRetries, bucket: this.rateLimiter });
   }
 }
