@@ -11,7 +11,7 @@
   <section>
     <h2 class="text-lg font-semibold text-gray-800 mb-4">Timeline</h2>
     <div class="bg-white shadow rounded-lg divide-y divide-gray-200">
-      {{#if events.length}}
+      {{#if hasEvents}}
       {{#each events}}
       <div class="p-4">
         <div class="flex items-center justify-between mb-1">
@@ -23,16 +23,12 @@
         </div>
         <p class="text-sm text-gray-600">{{this.parsed_description}}</p>
         <div class="mt-1 flex space-x-3 text-sm">
-          {{#if this.meeting_id}}
-          <a href="/briefing/{{this.meeting_id}}" class="text-indigo-600 hover:text-indigo-800">View Meeting</a>
-          {{/if}}
-          {{#if this.linear_issue_id}}
-          <span class="text-gray-500">Linear: {{this.linear_issue_id}}</span>
-          {{/if}}
+          {{{this.linksHtml}}}
         </div>
       </div>
       {{/each}}
-      {{else}}
+      {{/if}}
+      {{#if noEvents}}
       <p class="p-4 text-gray-500">No timeline events yet.</p>
       {{/if}}
     </div>

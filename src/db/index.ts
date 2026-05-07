@@ -64,10 +64,19 @@ export const queries: Record<string, () => Statement> = {
 
   // Meetings
   getMeetingById: () => getDb().prepare('SELECT * FROM meetings WHERE id = ?'),
+  getAllMeetings: () => getDb().prepare('SELECT * FROM meetings ORDER BY scheduled_at DESC'),
   getMeetingsByClient: () =>
     getDb().prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
   getMeetingsByStatus: () =>
     getDb().prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
+  getMeetingsByStatusWithClient: () =>
+    getDb().prepare(
+      'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+    ),
+  getAllMeetingsWithClient: () =>
+    getDb().prepare(
+      'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
+    ),
   insertMeeting: () =>
     getDb().prepare(
       'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',

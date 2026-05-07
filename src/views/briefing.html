@@ -3,7 +3,7 @@
     <div>
       <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Back to Dashboard</a>
       <h1 class="text-2xl font-bold text-gray-900 mt-2">{{meeting.title}}</h1>
-      <p class="text-gray-500">{{meeting.client_name}} &middot; {{meeting.scheduled_at}}</p>
+      <p class="text-gray-500">{{clientName}} &middot; {{meeting.scheduled_at}}</p>
     </div>
     {{#if briefing}}
     <div class="flex gap-2">
@@ -21,72 +21,67 @@
     {{/if}}
   </div>
 
-  {{#if briefing}}
-  <!-- Executive Summary -->
-  {{#if briefing.executiveSummary}}
+  <!-- Last Deliveries -->
+  {{#if lastDeliveries}}
   <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Executive Summary</h2>
-    <p class="text-gray-700 leading-relaxed">{{briefing.executiveSummary}}</p>
-  </section>
-  {{/if}}
-
-  <!-- Key Topics -->
-  {{#if briefing.keyTopics}}
-  <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Key Topics</h2>
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Last Deliveries</h2>
     <ul class="list-disc list-inside space-y-1 text-gray-700">
-      {{#each briefing.keyTopics}}
+      {{#each lastDeliveries}}
       <li>{{this}}</li>
       {{/each}}
     </ul>
   </section>
   {{/if}}
 
-  <!-- Client Background -->
-  {{#if briefing.clientBackground}}
+  <!-- Open Items & Risks -->
+  {{#if openItemsAndRisks}}
   <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Client Background</h2>
-    <p class="text-gray-700 leading-relaxed">{{briefing.clientBackground}}</p>
-  </section>
-  {{/if}}
-
-  <!-- Talking Points -->
-  {{#if briefing.talkingPoints}}
-  <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Talking Points</h2>
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Open Items &amp; Risks</h2>
     <ul class="list-disc list-inside space-y-1 text-gray-700">
-      {{#each briefing.talkingPoints}}
+      {{#each openItemsAndRisks}}
       <li>{{this}}</li>
       {{/each}}
     </ul>
   </section>
   {{/if}}
 
-  <!-- Action Items -->
-  {{#if briefing.actionItems}}
+  <!-- Recent Agreements -->
+  {{#if recentAgreements}}
   <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Action Items</h2>
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Recent Agreements</h2>
     <ul class="list-disc list-inside space-y-1 text-gray-700">
-      {{#each briefing.actionItems}}
+      {{#each recentAgreements}}
       <li>{{this}}</li>
       {{/each}}
     </ul>
   </section>
   {{/if}}
 
-  <!-- Risks & Concerns -->
-  {{#if briefing.risks}}
+  <!-- Suggested Next Steps -->
+  {{#if suggestedNextSteps}}
   <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Risks &amp; Concerns</h2>
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Suggested Next Steps</h2>
     <ul class="list-disc list-inside space-y-1 text-gray-700">
-      {{#each briefing.risks}}
+      {{#each suggestedNextSteps}}
       <li>{{this}}</li>
       {{/each}}
     </ul>
   </section>
   {{/if}}
 
-  {{else}}
+  <!-- Recommended Questions -->
+  {{#if recommendedQuestions}}
+  <section class="bg-white shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-3">Recommended Questions</h2>
+    <ul class="list-disc list-inside space-y-1 text-gray-700">
+      {{#each recommendedQuestions}}
+      <li>{{this}}</li>
+      {{/each}}
+    </ul>
+  </section>
+  {{/if}}
+
+  {{#if noBriefing}}
   <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
     <p class="text-yellow-800">No briefing has been generated yet.</p>
     <form method="POST" action="/briefing/{{meeting.id}}/prepare" class="mt-4">

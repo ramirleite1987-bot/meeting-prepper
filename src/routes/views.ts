@@ -67,6 +67,11 @@ function renderSimpleTemplate(template: string, data: Record<string, unknown>): 
           let rendered = block;
           if (typeof item === 'object' && item !== null) {
             const obj = item as Record<string, unknown>;
+            // Unescaped {{{this.prop}}} first so it doesn't match the escaped pattern.
+            rendered = rendered.replace(/\{\{\{this\.([\w]+)\}\}\}/g, (_m: string, prop: string) =>
+              String(obj[prop] ?? ''),
+            );
+            // Escaped {{this.prop}}
             rendered = rendered.replace(/\{\{this\.([\w]+)\}\}/g, (_m: string, prop: string) =>
               escapeHtml(String(obj[prop] ?? '')),
             );
@@ -77,6 +82,12 @@ function renderSimpleTemplate(template: string, data: Record<string, unknown>): 
         .join('');
     },
   );
+
+  // Handle {{{key}}} unescaped replacements
+  result = result.replace(/\{\{\{([\w.]+)\}\}\}/g, (_match, key: string) => {
+    const val = resolveValue(data, key);
+    return val !== null && val !== undefined ? String(val) : '';
+  });
 
   // Handle {{key}} simple replacements
   result = result.replace(/\{\{([\w.]+)\}\}/g, (_match, key: string) => {
@@ -115,11 +126,28 @@ function escapeHtml(str: string): string {
 
 router.get('/', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const meetings = queries.getMeetingsByStatus().all('scheduled') as Record<string, unknown>[];
+    const rawMeetings = queries.getMeetingsByStatusWithClient().all('scheduled') as Record<
+      string,
+      unknown
+    >[];
     const clients = queries.getAllClients().all() as Record<string, unknown>[];
 
+    const meetings = rawMeetings.map((m) => ({
+      ...m,
+      actionHtml: m.briefing
+        ? `<a href="/briefing/${escapeHtml(String(m.id))}" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">View Briefing</a>`
+        : `<form method="POST" action="/briefing/${escapeHtml(String(m.id))}/prepare"><button type="submit" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Generate Briefing</button></form>`,
+    }));
+
     const template = loadTemplate('dashboard');
-    const content = renderSimpleTemplate(template, { meetings, clients });
+    const content = renderSimpleTemplate(template, {
+      meetings,
+      hasMeetings: meetings.length > 0,
+      noMeetings: meetings.length === 0,
+      clients,
+      hasClients: clients.length > 0,
+      noClients: clients.length === 0,
+    });
     const html = renderLayout('Dashboard', content);
 
     res.type('html').send(html);
@@ -398,7 +426,12 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
       return;
     }
 
-    let briefing = null;
+    const client = queries.getClientById().get(meeting.client_id as string) as
+      | Record<string, unknown>
+      | undefined;
+    const clientName = (client?.name as string) ?? '';
+
+    let briefing: Record<string, unknown> | null = null;
     if (meeting.briefing) {
       try {
         briefing = JSON.parse(meeting.briefing as string);
@@ -407,8 +440,20 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
       }
     }
 
+    const sections = (briefing?.sections ?? {}) as Record<string, { items?: string[] }>;
+
     const template = loadTemplate('briefing');
-    const content = renderSimpleTemplate(template, { meeting, briefing });
+    const content = renderSimpleTemplate(template, {
+      meeting,
+      clientName,
+      hasBriefing: !!briefing,
+      noBriefing: !briefing,
+      lastDeliveries: sections.lastDeliveries?.items ?? [],
+      openItemsAndRisks: sections.openItemsAndRisks?.items ?? [],
+      recentAgreements: sections.recentAgreements?.items ?? [],
+      suggestedNextSteps: sections.suggestedNextSteps?.items ?? [],
+      recommendedQuestions: sections.recommendedQuestions?.items ?? [],
+    });
     const html = renderLayout('Briefing', content);
 
     res.type('html').send(html);
@@ -514,11 +559,28 @@ router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => 
       } catch {
         /* skip */
       }
+
+      // Precompute the inline link HTML so the template can inject it via
+      // {{{linksHtml}}} without nested {{#if}} blocks (the simple template
+      // engine's outer regex consumed the inner {{/if}} closer).
+      const links: string[] = [];
+      if (evt.meeting_id) {
+        links.push(
+          `<a href="/briefing/${escapeHtml(evt.meeting_id)}" class="text-indigo-600 hover:text-indigo-800">View Meeting</a>`,
+        );
+      }
+      if (parsed.linear_issue_id) {
+        links.push(
+          `<span class="text-gray-500">Linear: ${escapeHtml(String(parsed.linear_issue_id))}</span>`,
+        );
+      }
+
       return {
         ...evt,
         parsed_title: parsed.title || parsed.name || evt.event_type,
         parsed_description: parsed.description || parsed.summary || '',
         linear_issue_id: parsed.linear_issue_id || null,
+        linksHtml: links.join(''),
         type_class:
           evt.event_type === 'meeting'
             ? 'bg-indigo-100 text-indigo-800'
@@ -531,7 +593,12 @@ router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => 
     });
 
     const template = loadTemplate('client-detail');
-    const content = renderSimpleTemplate(template, { client, events });
+    const content = renderSimpleTemplate(template, {
+      client,
+      events,
+      hasEvents: events.length > 0,
+      noEvents: events.length === 0,
+    });
     const html = renderLayout(`${client.name} - Timeline`, content);
 
     res.type('html').send(html);
@@ -556,6 +623,11 @@ router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) =
         .send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
     }
+
+    const client = queries.getClientById().get(meeting.client_id as string) as
+      | Record<string, unknown>
+      | undefined;
+    const clientName = (client?.name as string) ?? '';
 
     let postCall = null;
     if (meeting.post_call_notes) {
@@ -615,8 +687,18 @@ router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) =
             : 'bg-yellow-100 text-yellow-800',
     }));
 
+    const hasPostCall = !!postCall || actionItems.length > 0;
+
     const template = loadTemplate('post-call');
-    const content = renderSimpleTemplate(template, { meeting, postCall, actionItems });
+    const content = renderSimpleTemplate(template, {
+      meeting,
+      clientName,
+      postCallSummary: postCall?.summary ?? '',
+      postCallDecisions: postCall?.decisions ?? [],
+      postCallRisks: postCall?.risks ?? [],
+      actionItems,
+      noPostCall: !hasPostCall,
+    });
     const html = renderLayout('Post-Call Review', content);
 
     res.type('html').send(html);
