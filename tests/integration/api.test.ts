@@ -46,25 +46,27 @@ vi.mock('../../src/db/index.js', () => {
       testDb.prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
     getMeetingsByStatus: () =>
       testDb.prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
-<<<<<<< HEAD
-    getAllMeetings: () => testDb.prepare('SELECT * FROM meetings ORDER BY scheduled_at DESC'),
-    getMeetingsByStatusWithClient: () =>
+    getAllMeetings: () =>
       testDb.prepare(
-        'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+        'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
       ),
     getAllMeetingsWithClient: () =>
       testDb.prepare(
-        'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
+        'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
       ),
-=======
-    getAllMeetings: () =>
-      testDb.prepare('SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC'),
+    getMeetingsByStatusWithClient: () =>
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+      ),
     getMeetingsWithClient: () =>
-      testDb.prepare("SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC"),
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+      ),
     getMeetingWithClient: () =>
-      testDb.prepare('SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.id = ?'),
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.id = ?',
+      ),
     deleteClient: () => testDb.prepare('DELETE FROM clients WHERE id = ?'),
->>>>>>> 3f51314 (Google and linear integration)
     insertMeeting: () =>
       testDb.prepare(
         'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',
@@ -95,6 +97,14 @@ vi.mock('../../src/db/index.js', () => {
         `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
          VALUES (@id, @clientId, @source, @externalId, @title, @content, @occurredAt, @metadata)
          ON CONFLICT(source, external_id, client_id) DO UPDATE SET title = excluded.title`,
+      ),
+    getExternalContextByClient: () =>
+      testDb.prepare(
+        'SELECT * FROM external_context WHERE client_id = ? ORDER BY occurred_at DESC LIMIT ?',
+      ),
+    getExternalContextByClientSince: () =>
+      testDb.prepare(
+        'SELECT * FROM external_context WHERE client_id = ? AND occurred_at >= ? ORDER BY occurred_at DESC LIMIT ?',
       ),
     getExternalContextByClientName: () =>
       testDb.prepare(
@@ -261,9 +271,11 @@ describe('API Integration Tests', () => {
       results: [],
       errors: [],
     });
-    mockListLinearProjects.mockReset().mockResolvedValue([
-      { id: 'project-1', name: 'Implementation', updatedAt: new Date('2025-01-01') },
-    ]);
+    mockListLinearProjects
+      .mockReset()
+      .mockResolvedValue([
+        { id: 'project-1', name: 'Implementation', updatedAt: new Date('2025-01-01') },
+      ]);
     mockImportLinearProjectContext.mockReset().mockResolvedValue({
       imported: 2,
       projectId: 'project-1',
@@ -526,13 +538,11 @@ describe('API Integration Tests', () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
       testDb
         .prepare(
-          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
         )
         .run('m1', 'c1', 'Weekly', '2024-01-01', 'completed');
       testDb
-        .prepare(
-          'INSERT INTO action_items (id, meeting_id, source, title) VALUES (?, ?, ?, ?)',
-        )
+        .prepare('INSERT INTO action_items (id, meeting_id, source, title) VALUES (?, ?, ?, ?)')
         .run('ai-1', 'm1', 'manual', 'Follow up');
     });
 

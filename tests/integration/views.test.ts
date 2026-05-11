@@ -41,6 +41,14 @@ vi.mock('../../src/db/index.js', () => {
       testDb.prepare(
         'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
       ),
+    getMeetingsWithClient: () =>
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+      ),
+    getMeetingWithClient: () =>
+      testDb.prepare(
+        'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id WHERE m.id = ?',
+      ),
     insertMeeting: () =>
       testDb.prepare(
         'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',
@@ -126,6 +134,7 @@ vi.mock('../../src/services/notification.service.js', () => ({
 
 vi.mock('../../src/services/client-context.service.js', () => ({
   ClientContextService: vi.fn().mockImplementation(() => ({
+    registerAdapter: vi.fn(),
     getClientContext: vi.fn().mockResolvedValue([]),
     // Read directly from testDb so seeded client_history shows up
     getClientTimeline: (clientId: string) =>
@@ -147,6 +156,39 @@ vi.mock('../../src/services/sync.service.js', () => ({
     syncAllActionItems: vi.fn(),
     handleLinearUpdate: vi.fn(),
   })),
+}));
+
+// Prevent eager TokenManager singleton from calling getDb() before testDb is ready
+vi.mock('../../src/utils/token-manager.js', () => ({
+  tokenManager: {
+    getValidToken: vi.fn().mockResolvedValue(null),
+    storeToken: vi.fn(),
+    registerRefreshFunction: vi.fn(),
+    removeToken: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/utils/mcp-client.js', () => ({
+  createMCPClient: vi.fn(),
+}));
+
+vi.mock('../../src/routes/api.js', () => ({
+  clientContextService: {
+    registerAdapter: vi.fn(),
+    getClientContext: vi.fn().mockResolvedValue([]),
+    getClientTimeline: (clientId: string) =>
+      testDb
+        .prepare('SELECT * FROM client_history WHERE client_id = ? ORDER BY occurred_at DESC')
+        .all(clientId),
+  },
+  briefingService: {
+    generateBriefing: vi.fn().mockResolvedValue(undefined),
+  },
+  meetingContextService: {
+    getAttachedContextEntries: vi.fn().mockReturnValue([]),
+    searchCandidates: vi.fn().mockResolvedValue([]),
+    attachSelections: vi.fn().mockResolvedValue(0),
+  },
 }));
 
 const { viewRouter } = await import('../../src/routes/views.js');
@@ -204,7 +246,7 @@ describe('HTML View Integration Tests', () => {
         .run(JSON.stringify({ clientName: 'Acme Corp', sections: {} }), 'm1');
 
       const res = await request(app).get('/').expect(200);
-      expect(res.text).toContain('View Briefing');
+      expect(res.text).toContain('Briefing');
       expect(res.text).not.toContain('{{');
       expect(res.text).not.toContain('}}');
     });
@@ -212,7 +254,7 @@ describe('HTML View Integration Tests', () => {
     it('GET / shows "No upcoming meetings" when no meetings exist', async () => {
       testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Empty Corp');
       const res = await request(app).get('/').expect(200);
-      expect(res.text).toContain('No upcoming meetings');
+      expect(res.text).toContain('No meetings yet');
     });
 
     it('GET / does not leak raw template syntax', async () => {
@@ -358,9 +400,9 @@ describe('HTML View Integration Tests', () => {
 
       const res = await request(app).get('/post-call/m1').expect(200);
 
-      // Correct sync URLs (the previous bug had /api/linear/... which doesn't exist)
-      expect(res.text).toContain('action="/api/meetings/m1/action-items/ai-1/sync"');
-      expect(res.text).toContain('action="/api/meetings/m1/sync-all"');
+      // Sync buttons are now JS onclick-based; check correct function calls
+      expect(res.text).toContain("syncItem('m1', 'ai-1')");
+      expect(res.text).toContain("syncAll('m1')");
       // Bug URLs should not appear
       expect(res.text).not.toContain('/api/linear/sync');
       expect(res.text).not.toContain('/api/linear/sync-all');
