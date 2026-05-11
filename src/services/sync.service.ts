@@ -34,6 +34,10 @@ export interface WebhookUpdate {
   updatedAt: string;
 }
 
+export interface LinearSyncOptions {
+  projectId?: string;
+}
+
 // ──────────────────────────────────────────────
 // Service
 // ──────────────────────────────────────────────
@@ -65,7 +69,11 @@ export class SyncService {
    * Sync a single action item to Linear.
    * Creates a new issue or updates an existing one based on reconciliation.
    */
-  async syncActionItem(meetingId: string, actionItemId: string): Promise<SyncResult> {
+  async syncActionItem(
+    meetingId: string,
+    actionItemId: string,
+    options: LinearSyncOptions = {},
+  ): Promise<SyncResult> {
     await this.ensureInitialized();
 
     const db = getDb();
@@ -124,6 +132,7 @@ export class SyncService {
       status: (actionItem.status as ActionItem['status']) ?? 'pending',
       source: (actionItem.source as string) ?? 'meeting',
       meetingId,
+      metadata: options.projectId ? { linearProjectId: options.projectId } : undefined,
     };
 
     if (actionItem.deadline) {
@@ -158,7 +167,10 @@ export class SyncService {
   /**
    * Sync all action items for a meeting to Linear.
    */
-  async syncAllActionItems(meetingId: string): Promise<BatchSyncResult> {
+  async syncAllActionItems(
+    meetingId: string,
+    options: LinearSyncOptions = {},
+  ): Promise<BatchSyncResult> {
     await this.ensureInitialized();
 
     const actionItems = queries.getActionItemsByMeeting().all(meetingId) as Array<
@@ -171,7 +183,7 @@ export class SyncService {
     for (const item of actionItems) {
       const itemId = item.id as string;
       try {
-        const result = await this.syncActionItem(meetingId, itemId);
+        const result = await this.syncActionItem(meetingId, itemId, options);
         results.push(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

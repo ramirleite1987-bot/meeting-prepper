@@ -5,7 +5,15 @@
  */
 
 import { LinearClient } from '@linear/sdk';
-import type { ITaskAdapter, ActionItem, TaskReference, TaskStatus } from './types.js';
+import type {
+  ITaskAdapter,
+  ActionItem,
+  LinearIssueContext,
+  LinearProjectContext,
+  LinearProjectSummary,
+  TaskReference,
+  TaskStatus,
+} from './types.js';
 import { TokenBucket, withRateLimitedRetry } from './linear-rate-limiter.js';
 import { mapLinearStateToTaskStatus, mapPriorityToLinear } from './linear-status.js';
 
@@ -67,6 +75,7 @@ export class LinearAdapter implements ITaskAdapter {
         assigneeId,
         dueDate: actionItem.dueDate?.toISOString().split('T')[0],
         priority: mapPriorityToLinear(actionItem.priority),
+        projectId: getLinearProjectId(actionItem.metadata),
       }),
     );
 
@@ -126,6 +135,39 @@ export class LinearAdapter implements ITaskAdapter {
     return this.getIssueStatus(taskId);
   }
 
+  async listProjects(limit = 50): Promise<LinearProjectSummary[]> {
+    this.ensureClient();
+
+    const projects = await this.withRetry(() => this.client!.projects({ first: limit }));
+    return projects.nodes.map((project) => ({
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      content: project.content,
+      url: project.url,
+      updatedAt: project.updatedAt,
+    }));
+  }
+
+  async getProjectContext(projectId: string, issueLimit = 50): Promise<LinearProjectContext> {
+    this.ensureClient();
+
+    const project = await this.withRetry(() => this.client!.project(projectId));
+    const issues = await this.withRetry(() => project.issues({ first: issueLimit }));
+
+    return {
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        content: project.content,
+        url: project.url,
+        updatedAt: project.updatedAt,
+      },
+      issues: issues.nodes.map(toIssueContext),
+    };
+  }
+
   // ──────────────────────────────────────────────
   // Helpers
   // ──────────────────────────────────────────────
@@ -181,4 +223,27 @@ export class LinearAdapter implements ITaskAdapter {
   private async withRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
     return withRateLimitedRetry(fn, { maxRetries, bucket: this.rateLimiter });
   }
+}
+
+function getLinearProjectId(metadata?: Record<string, unknown>): string | undefined {
+  const value = metadata?.linearProjectId;
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function toIssueContext(issue: {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string | null;
+  url?: string;
+  updatedAt: Date;
+}): LinearIssueContext {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description,
+    url: issue.url,
+    updatedAt: issue.updatedAt,
+  };
 }

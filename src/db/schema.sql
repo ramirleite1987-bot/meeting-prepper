@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'client',
   project TEXT,
+  aliases TEXT NOT NULL DEFAULT '{"domains":[],"emails":[],"keywords":[]}',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -28,6 +30,20 @@ CREATE TABLE IF NOT EXISTS meeting_sources (
   risks TEXT, -- JSON array
   raw_data TEXT, -- Full JSON response
   fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS external_context (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  source TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  occurred_at DATETIME NOT NULL,
+  metadata TEXT NOT NULL DEFAULT '{}',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(source, external_id, client_id)
 );
 
 CREATE TABLE IF NOT EXISTS action_items (
@@ -67,12 +83,17 @@ CREATE TABLE IF NOT EXISTS client_history (
 
 -- Indices for fast lookups
 CREATE INDEX IF NOT EXISTS idx_meetings_client ON meetings(client_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_sources_unique_external
+  ON meeting_sources(meeting_id, source, external_id)
+  WHERE external_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status);
 CREATE INDEX IF NOT EXISTS idx_action_items_meeting ON action_items(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_action_items_hash ON action_items(context_hash);
 CREATE INDEX IF NOT EXISTS idx_linear_sync_issue ON linear_sync(linear_issue_id);
 CREATE INDEX IF NOT EXISTS idx_linear_sync_meeting ON linear_sync(meeting_id);
 CREATE INDEX IF NOT EXISTS idx_client_history_client ON client_history(client_id);
+CREATE INDEX IF NOT EXISTS idx_external_context_client ON external_context(client_id, occurred_at);
+CREATE INDEX IF NOT EXISTS idx_external_context_source ON external_context(source, external_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_scheduled ON meetings(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_action_items_deadline ON action_items(deadline);
 CREATE INDEX IF NOT EXISTS idx_action_items_status ON action_items(status);

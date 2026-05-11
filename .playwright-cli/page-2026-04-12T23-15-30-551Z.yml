@@ -1,0 +1,57 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e4]:
+      - link "Meeting Prepper" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - link "Dashboard" [ref=e7] [cursor=pointer]:
+          - /url: /
+        - button "+ Meeting" [ref=e8] [cursor=pointer]
+        - button "2" [ref=e10] [cursor=pointer]:
+          - img [ref=e11]
+          - generic [ref=e13]: "2"
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Dashboard" [level=1] [ref=e17]
+        - generic [ref=e18]:
+          - button "Add Client" [ref=e19] [cursor=pointer]
+          - button "Prepare Meeting" [ref=e20] [cursor=pointer]
+      - generic [ref=e21]:
+        - heading "Meetings" [level=2] [ref=e22]
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e25]:
+              - paragraph [ref=e26]: Weekly Sync
+              - paragraph [ref=e27]: Acme Corp · 2026-04-15T10:00:00Z
+              - generic [ref=e28]: scheduled
+            - generic [ref=e29]:
+              - link "Briefing" [ref=e30] [cursor=pointer]:
+                - /url: /briefing/a12dfa4a-b042-451f-9736-faa6ecdfeb47
+              - link "Post-Call" [ref=e31] [cursor=pointer]:
+                - /url: /post-call/a12dfa4a-b042-451f-9736-faa6ecdfeb47
+          - generic [ref=e32]:
+            - generic [ref=e33]:
+              - paragraph [ref=e34]: Sprint Planning
+              - paragraph [ref=e35]: TechStart Labs · 2026-04-20T09:00:00Z
+              - generic [ref=e36]: scheduled
+            - generic [ref=e37]:
+              - link "Briefing" [ref=e38] [cursor=pointer]:
+                - /url: /briefing/d32b6dbc-53db-4150-b16e-8a7176986f44
+              - link "Post-Call" [ref=e39] [cursor=pointer]:
+                - /url: /post-call/d32b6dbc-53db-4150-b16e-8a7176986f44
+      - generic [ref=e40]:
+        - heading "Clients" [level=2] [ref=e42]
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - generic [ref=e45]:
+              - paragraph [ref=e46]: TechStart Labs
+              - paragraph [ref=e47]: API Integration
+            - link "View Timeline" [ref=e48] [cursor=pointer]:
+              - /url: /clients/aca68cf7-6d63-4c9d-9a54-3f7f9f9df3ce
+          - generic [ref=e49]:
+            - generic [ref=e50]:
+              - paragraph [ref=e51]: Acme Corp
+              - paragraph [ref=e52]: Website Redesign
+            - link "View Timeline" [ref=e53] [cursor=pointer]:
+              - /url: /clients/bae68a03-0a72-4a4b-a0a1-24490be7c05e

@@ -24,9 +24,12 @@ vi.mock('../../src/db/index.js', () => {
 
   const queries = {
     getClientById: () => testDb.prepare('SELECT * FROM clients WHERE id = ?'),
+    getClientByName: () => testDb.prepare('SELECT * FROM clients WHERE lower(name) = lower(?)'),
     getAllClients: () => testDb.prepare('SELECT * FROM clients ORDER BY updated_at DESC'),
     insertClient: () =>
-      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (@id, @name, @project)'),
+      testDb.prepare(
+        'INSERT INTO clients (id, name, kind, project, aliases) VALUES (@id, @name, @kind, @project, @aliases)',
+      ),
     getMeetingById: () => testDb.prepare('SELECT * FROM meetings WHERE id = ?'),
     getMeetingsByClient: () =>
       testDb.prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
@@ -106,23 +109,29 @@ vi.mock('../../src/config.js', () => ({
     nodeEnv: 'test',
     databasePath: ':memory:',
     logLevel: 'error',
+    gogBin: 'gog',
+    gogGmailLabel: 'Processes',
+    googleSyncLookbackDays: 30,
+    googleSyncMaxResults: 25,
   },
 }));
 
 // Mock Linear adapter to avoid real API calls
+const mockCreateTask = vi.fn().mockImplementation((task: { title: string; meetingId?: string }) => ({
+  id: `linear-${randomUUID().slice(0, 8)}`,
+  externalId: 'LIN-123',
+  source: 'linear',
+  title: task.title,
+  status: 'todo',
+  meetingId: task.meetingId,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+}));
+
 vi.mock('../../src/adapters/linear.adapter.js', () => ({
   LinearAdapter: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
-    createTask: vi.fn().mockImplementation((task: { title: string; meetingId?: string }) => ({
-      id: `linear-${randomUUID().slice(0, 8)}`,
-      externalId: 'LIN-123',
-      source: 'linear',
-      title: task.title,
-      status: 'todo',
-      meetingId: task.meetingId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })),
+    createTask: mockCreateTask,
     updateTask: vi.fn().mockImplementation((id: string) => ({
       id,
       externalId: 'LIN-123',
@@ -188,6 +197,7 @@ describe('Sync Flow Integration Tests', () => {
   beforeEach(() => {
     testDb = createTestDb();
     syncService = new SyncService();
+    mockCreateTask.mockClear();
     mockFindExisting.mockReset().mockResolvedValue(null);
     mockStoreCrossReference.mockReset();
   });
@@ -203,6 +213,19 @@ describe('Sync Flow Integration Tests', () => {
       expect(result.linearIssueId).toBeDefined();
       expect(result.status).toBe('created');
       expect(result.taskReference).toBeDefined();
+    });
+
+    it('adds new action items to the selected Linear project', async () => {
+      seedBasicData();
+      seedActionItem('ai-1', 'm1', 'Fix authentication bug', 'hash-1');
+
+      await syncService.syncActionItem('m1', 'ai-1', { projectId: 'project-1' });
+
+      expect(mockCreateTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: { linearProjectId: 'project-1' },
+        }),
+      );
     });
 
     it('stores cross-reference after creating a Linear issue', async () => {

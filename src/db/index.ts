@@ -1,6 +1,7 @@
 import Database, { type Statement } from 'better-sqlite3';
-import { dirname } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { runMigrations } from './migrate.js';
@@ -12,6 +13,34 @@ let db: Database.Database | null = null;
  * The connection is reused for the lifetime of the process; call `closeDb()`
  * during shutdown. Pending migrations are applied automatically on first open.
  */
+
+function initializeSchema(database: Database.Database): void {
+  const schemaPath = join(dirname(fileURLToPath(import.meta.url)), 'schema.sql');
+  const schema = readFileSync(schemaPath, 'utf-8');
+  database.exec(schema);
+  migrateExistingSchema(database);
+}
+
+function columnExists(
+  database: Database.Database,
+  tableName: string,
+  columnName: string,
+): boolean {
+  const rows = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === columnName);
+}
+
+function migrateExistingSchema(database: Database.Database): void {
+  if (!columnExists(database, 'clients', 'kind')) {
+    database.exec("ALTER TABLE clients ADD COLUMN kind TEXT NOT NULL DEFAULT 'client'");
+  }
+
+  if (!columnExists(database, 'clients', 'aliases')) {
+    database.exec(
+      'ALTER TABLE clients ADD COLUMN aliases TEXT NOT NULL DEFAULT \'{"domains":[],"emails":[],"keywords":[]}\'',
+    );
+  }
+}
 export function getDb(): Database.Database {
   if (db) {
     return db;
@@ -30,6 +59,7 @@ export function getDb(): Database.Database {
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
 
+  initializeSchema(db);
   runMigrations(db);
 
   logger.info('Database initialized', { path: dbPath });
@@ -54,28 +84,43 @@ export function closeDb(): void {
 export const queries: Record<string, () => Statement> = {
   // Clients
   getClientById: () => getDb().prepare('SELECT * FROM clients WHERE id = ?'),
+  getClientByName: () => getDb().prepare('SELECT * FROM clients WHERE lower(name) = lower(?)'),
   getAllClients: () => getDb().prepare('SELECT * FROM clients ORDER BY updated_at DESC'),
   insertClient: () =>
-    getDb().prepare('INSERT INTO clients (id, name, project) VALUES (@id, @name, @project)'),
+    getDb().prepare(
+      'INSERT INTO clients (id, name, kind, project, aliases) VALUES (@id, @name, @kind, @project, @aliases)',
+    ),
   updateClient: () =>
     getDb().prepare(
-      'UPDATE clients SET name = @name, project = @project, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
+      'UPDATE clients SET name = @name, kind = @kind, project = @project, aliases = @aliases, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
     ),
+  deleteClient: () => getDb().prepare('DELETE FROM clients WHERE id = ?'),
 
   // Meetings
   getMeetingById: () => getDb().prepare('SELECT * FROM meetings WHERE id = ?'),
-  getAllMeetings: () => getDb().prepare('SELECT * FROM meetings ORDER BY scheduled_at DESC'),
+  getAllMeetings: () =>
+    getDb().prepare(
+      'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
+    ),
+  getAllMeetingsWithClient: () =>
+    getDb().prepare(
+      'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
+    ),
   getMeetingsByClient: () =>
     getDb().prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
   getMeetingsByStatus: () =>
     getDb().prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
   getMeetingsByStatusWithClient: () =>
     getDb().prepare(
-      'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
+      'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
     ),
-  getAllMeetingsWithClient: () =>
+  getMeetingsWithClient: () =>
     getDb().prepare(
-      'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
+      "SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC",
+    ),
+  getMeetingWithClient: () =>
+    getDb().prepare(
+      'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.id = ?',
     ),
   insertMeeting: () =>
     getDb().prepare(
@@ -97,6 +142,46 @@ export const queries: Record<string, () => Statement> = {
     ),
   getMeetingSourcesByMeeting: () =>
     getDb().prepare('SELECT * FROM meeting_sources WHERE meeting_id = ?'),
+  upsertMeetingSource: () =>
+    getDb().prepare(
+      `INSERT INTO meeting_sources (id, meeting_id, source, external_id, summary, decisions, risks, raw_data)
+       VALUES (@id, @meetingId, @source, @externalId, @summary, @decisions, @risks, @rawData)
+       ON CONFLICT(meeting_id, source, external_id) WHERE external_id IS NOT NULL
+       DO UPDATE SET summary = excluded.summary, decisions = excluded.decisions, risks = excluded.risks, raw_data = excluded.raw_data`,
+    ),
+
+  // External Context
+  upsertExternalContext: () =>
+    getDb().prepare(
+      `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
+       VALUES (@id, @clientId, @source, @externalId, @title, @content, @occurredAt, @metadata)
+       ON CONFLICT(source, external_id, client_id) DO UPDATE SET
+         title = excluded.title,
+         content = excluded.content,
+         occurred_at = excluded.occurred_at,
+         metadata = excluded.metadata,
+         updated_at = CURRENT_TIMESTAMP`,
+    ),
+  getExternalContextByClient: () =>
+    getDb().prepare('SELECT * FROM external_context WHERE client_id = ? ORDER BY occurred_at DESC LIMIT ?'),
+  getExternalContextByClientSince: () =>
+    getDb().prepare('SELECT * FROM external_context WHERE client_id = ? AND occurred_at >= ? ORDER BY occurred_at DESC LIMIT ?'),
+  getExternalContextByClientName: () =>
+    getDb().prepare(
+      `SELECT ec.* FROM external_context ec
+       JOIN clients c ON c.id = ec.client_id
+       WHERE lower(c.name) = lower(?)
+       ORDER BY ec.occurred_at DESC
+       LIMIT ?`,
+    ),
+  getExternalContextByClientNameSince: () =>
+    getDb().prepare(
+      `SELECT ec.* FROM external_context ec
+       JOIN clients c ON c.id = ec.client_id
+       WHERE lower(c.name) = lower(?) AND ec.occurred_at >= ?
+       ORDER BY ec.occurred_at DESC
+       LIMIT ?`,
+    ),
 
   // Action Items
   insertActionItem: () =>

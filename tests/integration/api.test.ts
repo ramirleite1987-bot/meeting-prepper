@@ -7,6 +7,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const mockSyncActionItem = vi.hoisted(() => vi.fn());
+const mockSyncAllActionItems = vi.hoisted(() => vi.fn());
+const mockListLinearProjects = vi.hoisted(() => vi.fn());
+const mockImportLinearProjectContext = vi.hoisted(() => vi.fn());
 
 // Create in-memory database and mock before importing app modules
 let testDb: Database.Database;
@@ -28,8 +32,11 @@ vi.mock('../../src/db/index.js', () => {
   const queries = {
     getAllClients: () => testDb.prepare('SELECT * FROM clients ORDER BY updated_at DESC'),
     getClientById: () => testDb.prepare('SELECT * FROM clients WHERE id = ?'),
+    getClientByName: () => testDb.prepare('SELECT * FROM clients WHERE lower(name) = lower(?)'),
     insertClient: () =>
-      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (@id, @name, @project)'),
+      testDb.prepare(
+        'INSERT INTO clients (id, name, kind, project, aliases) VALUES (@id, @name, @kind, @project, @aliases)',
+      ),
     updateClient: () =>
       testDb.prepare(
         'UPDATE clients SET name = @name, project = @project, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -39,6 +46,7 @@ vi.mock('../../src/db/index.js', () => {
       testDb.prepare('SELECT * FROM meetings WHERE client_id = ? ORDER BY scheduled_at DESC'),
     getMeetingsByStatus: () =>
       testDb.prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
+<<<<<<< HEAD
     getAllMeetings: () => testDb.prepare('SELECT * FROM meetings ORDER BY scheduled_at DESC'),
     getMeetingsByStatusWithClient: () =>
       testDb.prepare(
@@ -48,6 +56,15 @@ vi.mock('../../src/db/index.js', () => {
       testDb.prepare(
         'SELECT m.*, c.name AS client_name FROM meetings m LEFT JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC',
       ),
+=======
+    getAllMeetings: () =>
+      testDb.prepare('SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id ORDER BY m.scheduled_at DESC'),
+    getMeetingsWithClient: () =>
+      testDb.prepare("SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC"),
+    getMeetingWithClient: () =>
+      testDb.prepare('SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.id = ?'),
+    deleteClient: () => testDb.prepare('DELETE FROM clients WHERE id = ?'),
+>>>>>>> 3f51314 (Google and linear integration)
     insertMeeting: () =>
       testDb.prepare(
         'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',
@@ -66,6 +83,27 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getMeetingSourcesByMeeting: () =>
       testDb.prepare('SELECT * FROM meeting_sources WHERE meeting_id = ?'),
+    upsertMeetingSource: () =>
+      testDb.prepare(
+        `INSERT INTO meeting_sources (id, meeting_id, source, external_id, summary, decisions, risks, raw_data)
+         VALUES (@id, @meetingId, @source, @externalId, @summary, @decisions, @risks, @rawData)
+         ON CONFLICT(meeting_id, source, external_id) WHERE external_id IS NOT NULL
+         DO UPDATE SET summary = excluded.summary, decisions = excluded.decisions, risks = excluded.risks, raw_data = excluded.raw_data`,
+      ),
+    upsertExternalContext: () =>
+      testDb.prepare(
+        `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
+         VALUES (@id, @clientId, @source, @externalId, @title, @content, @occurredAt, @metadata)
+         ON CONFLICT(source, external_id, client_id) DO UPDATE SET title = excluded.title`,
+      ),
+    getExternalContextByClientName: () =>
+      testDb.prepare(
+        'SELECT ec.* FROM external_context ec JOIN clients c ON c.id = ec.client_id WHERE lower(c.name) = lower(?) ORDER BY ec.occurred_at DESC LIMIT ?',
+      ),
+    getExternalContextByClientNameSince: () =>
+      testDb.prepare(
+        'SELECT ec.* FROM external_context ec JOIN clients c ON c.id = ec.client_id WHERE lower(c.name) = lower(?) AND ec.occurred_at >= ? ORDER BY ec.occurred_at DESC LIMIT ?',
+      ),
     insertActionItem: () =>
       testDb.prepare(
         'INSERT INTO action_items (id, meeting_id, source, title, description, owner, deadline, priority, context_hash) VALUES (@id, @meetingId, @source, @title, @description, @owner, @deadline, @priority, @contextHash)',
@@ -123,6 +161,10 @@ vi.mock('../../src/config.js', () => ({
     databasePath: ':memory:',
     logLevel: 'error',
     linearWebhookSecret: 'test-secret',
+    gogBin: 'gog',
+    gogGmailLabel: 'Processes',
+    googleSyncLookbackDays: 30,
+    googleSyncMaxResults: 25,
   },
 }));
 
@@ -138,6 +180,7 @@ vi.mock('../../src/services/notification.service.js', () => ({
 // Mock external services used by routes
 vi.mock('../../src/services/client-context.service.js', () => ({
   ClientContextService: vi.fn().mockImplementation(() => ({
+    registerAdapter: vi.fn(),
     getClientContext: vi.fn().mockResolvedValue([
       {
         source: 'test',
@@ -147,6 +190,21 @@ vi.mock('../../src/services/client-context.service.js', () => ({
         timestamp: new Date(),
       },
     ]),
+  })),
+}));
+
+vi.mock('../../src/services/google-context.service.js', () => ({
+  GoogleContextService: vi.fn().mockImplementation(() => ({
+    getStatus: vi.fn().mockResolvedValue({ available: true, accountConfigured: false }),
+    sync: vi.fn().mockResolvedValue({ imported: 0, clientsChecked: 0, errors: [] }),
+  })),
+}));
+
+vi.mock('../../src/services/meeting-context.service.js', () => ({
+  MeetingContextService: vi.fn().mockImplementation(() => ({
+    searchCandidates: vi.fn().mockResolvedValue([]),
+    attachSelections: vi.fn().mockResolvedValue(0),
+    getAttachedContextEntries: vi.fn().mockReturnValue([]),
   })),
 }));
 
@@ -160,19 +218,17 @@ vi.mock('../../src/services/extraction.service.js', () => ({
   })),
 }));
 
+vi.mock('../../src/services/linear-context.service.js', () => ({
+  LinearContextService: vi.fn().mockImplementation(() => ({
+    listProjects: mockListLinearProjects,
+    importProjectContext: mockImportLinearProjectContext,
+  })),
+}));
+
 vi.mock('../../src/services/sync.service.js', () => ({
   SyncService: vi.fn().mockImplementation(() => ({
-    syncActionItem: vi.fn().mockResolvedValue({
-      actionItemId: 'item-1',
-      linearIssueId: 'LIN-1',
-      status: 'created',
-      taskReference: { id: 'LIN-1', title: 'Test', status: 'todo' },
-    }),
-    syncAllActionItems: vi.fn().mockResolvedValue({
-      meetingId: 'meeting-1',
-      results: [],
-      errors: [],
-    }),
+    syncActionItem: mockSyncActionItem,
+    syncAllActionItems: mockSyncAllActionItems,
     handleLinearUpdate: vi.fn().mockResolvedValue(undefined),
   })),
 }));
@@ -194,6 +250,24 @@ describe('API Integration Tests', () => {
 
   beforeEach(() => {
     testDb = createTestDb();
+    mockSyncActionItem.mockReset().mockResolvedValue({
+      actionItemId: 'item-1',
+      linearIssueId: 'LIN-1',
+      status: 'created',
+      taskReference: { id: 'LIN-1', title: 'Test', status: 'todo' },
+    });
+    mockSyncAllActionItems.mockReset().mockResolvedValue({
+      meetingId: 'meeting-1',
+      results: [],
+      errors: [],
+    });
+    mockListLinearProjects.mockReset().mockResolvedValue([
+      { id: 'project-1', name: 'Implementation', updatedAt: new Date('2025-01-01') },
+    ]);
+    mockImportLinearProjectContext.mockReset().mockResolvedValue({
+      imported: 2,
+      projectId: 'project-1',
+    });
     app = createApp();
   });
 
@@ -265,6 +339,35 @@ describe('API Integration Tests', () => {
     });
   });
 
+  describe('Linear Projects', () => {
+    it('GET /api/linear/projects returns selectable Linear projects', async () => {
+      const res = await request(app).get('/api/linear/projects').expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].id).toBe('project-1');
+      expect(mockListLinearProjects).toHaveBeenCalledOnce();
+    });
+
+    it('POST /api/clients/:id/linear-project/import imports project context', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+
+      const res = await request(app)
+        .post('/api/clients/c1/linear-project/import')
+        .send({ projectId: 'project-1' })
+        .expect(200);
+
+      expect(res.body).toEqual({ imported: 2, projectId: 'project-1' });
+      expect(mockImportLinearProjectContext).toHaveBeenCalledWith('c1', 'project-1');
+    });
+
+    it('POST /api/clients/:id/linear-project/import validates the project', async () => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+
+      await request(app).post('/api/clients/c1/linear-project/import').send({}).expect(400);
+      expect(mockImportLinearProjectContext).not.toHaveBeenCalled();
+    });
+  });
+
   // ──────────────────────────────────────────────
   // Meetings CRUD
   // ──────────────────────────────────────────────
@@ -315,6 +418,7 @@ describe('API Integration Tests', () => {
     });
 
     it('GET /api/meetings filters by status', async () => {
+      // Client c1 is already created by beforeEach
       testDb
         .prepare(
           'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
@@ -414,6 +518,44 @@ describe('API Integration Tests', () => {
       const res = await request(app).get('/api/meetings/m1/briefing').expect(200);
 
       expect(res.body.clientName).toBe('Acme');
+    });
+  });
+
+  describe('Linear Sync', () => {
+    beforeEach(() => {
+      testDb.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
+      testDb
+        .prepare(
+          "INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run('m1', 'c1', 'Weekly', '2024-01-01', 'completed');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title) VALUES (?, ?, ?, ?)',
+        )
+        .run('ai-1', 'm1', 'manual', 'Follow up');
+    });
+
+    it('POST /api/meetings/:id/action-items/:itemId/sync passes selected project', async () => {
+      await request(app)
+        .post('/api/meetings/m1/action-items/ai-1/sync')
+        .send({ projectId: 'project-1' })
+        .expect(200);
+
+      expect(mockSyncActionItem).toHaveBeenCalledWith('m1', 'ai-1', {
+        projectId: 'project-1',
+      });
+    });
+
+    it('POST /api/meetings/:id/sync-all passes selected project', async () => {
+      await request(app)
+        .post('/api/meetings/m1/sync-all')
+        .send({ projectId: 'project-1' })
+        .expect(200);
+
+      expect(mockSyncAllActionItems).toHaveBeenCalledWith('m1', {
+        projectId: 'project-1',
+      });
     });
   });
 

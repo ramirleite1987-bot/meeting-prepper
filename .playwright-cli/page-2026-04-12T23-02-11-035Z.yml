@@ -1,0 +1,57 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e4]:
+      - link "Meeting Prepper" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - link "Dashboard" [ref=e7] [cursor=pointer]:
+          - /url: /
+        - button "+ Meeting" [ref=e8] [cursor=pointer]
+        - button "1" [ref=e10] [cursor=pointer]:
+          - img [ref=e11]
+          - generic [ref=e13]: "1"
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - link "← Back to Dashboard" [ref=e18] [cursor=pointer]:
+            - /url: /
+          - heading "Weekly Sync" [level=1] [ref=e19]
+          - paragraph [ref=e20]: Acme Corp · 2026-04-15T10:00:00Z
+        - generic [ref=e21]:
+          - button "Regenerate Briefing" [ref=e23] [cursor=pointer]
+          - link "Post-Call Review" [ref=e24] [cursor=pointer]:
+            - /url: /post-call/f880ee42-b8ae-455b-a6ac-2bdc4c89ab17
+      - text: "{{#if briefing.sections}} {{#if briefing.sections.lastDeliveries}}"
+      - generic [ref=e25]:
+        - heading "Last Deliveries" [level=2] [ref=e26]
+        - text: "{{#if briefing.sections.lastDeliveries.items.length}}"
+        - list
+      - text: "{{/if}}"
+      - generic [ref=e27]:
+        - heading "Open Items & Risks" [level=2] [ref=e28]
+        - text: "{{#if briefing.sections.openItemsAndRisks.items.length}}"
+        - list
+      - text: "{{/if}}"
+      - generic [ref=e29]:
+        - heading "Recent Agreements" [level=2] [ref=e30]
+        - text: "{{#if briefing.sections.recentAgreements.items.length}}"
+        - list
+      - text: "{{/if}}"
+      - generic [ref=e31]:
+        - heading "Suggested Next Steps" [level=2] [ref=e32]
+        - text: "{{#if briefing.sections.suggestedNextSteps.items.length}}"
+        - list
+      - text: "{{/if}}"
+      - generic [ref=e33]:
+        - heading "Recommended Questions" [level=2] [ref=e34]
+        - text: "{{#if briefing.sections.recommendedQuestions.items.length}}"
+        - list [ref=e35]:
+          - listitem [ref=e36]: What are the current priorities and expectations?
+          - listitem [ref=e37]: Are there any upcoming deadlines we should be aware of?
+          - listitem [ref=e38]: What are the key outcomes expected from this meeting?
+      - text: "{{/if}} {{/if}}"
+      - generic [ref=e39]:
+        - paragraph [ref=e40]: No briefing has been generated yet.
+        - button "Generate Briefing" [ref=e42] [cursor=pointer]
+      - text: "{{/if}}"

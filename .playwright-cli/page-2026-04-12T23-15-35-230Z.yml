@@ -1,0 +1,23 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e4]:
+      - link "Meeting Prepper" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - link "Dashboard" [ref=e7] [cursor=pointer]:
+          - /url: /
+        - button "+ Meeting" [ref=e8] [cursor=pointer]
+        - button "2" [ref=e10] [cursor=pointer]:
+          - img [ref=e11]
+          - generic [ref=e13]: "2"
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "TechStart Labs" [level=1] [ref=e18]
+          - paragraph [ref=e19]: API Integration
+        - link "Back to Dashboard" [ref=e20] [cursor=pointer]:
+          - /url: /
+      - generic [ref=e21]:
+        - heading "Timeline" [level=2] [ref=e22]
+        - paragraph [ref=e24]: No timeline events yet.

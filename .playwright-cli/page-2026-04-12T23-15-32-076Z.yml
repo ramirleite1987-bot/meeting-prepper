@@ -1,0 +1,30 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e4]:
+      - link "Meeting Prepper" [ref=e5] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e6]:
+        - link "Dashboard" [ref=e7] [cursor=pointer]:
+          - /url: /
+        - button "+ Meeting" [ref=e8] [cursor=pointer]
+        - button "2" [ref=e10] [cursor=pointer]:
+          - img [ref=e11]
+          - generic [ref=e13]: "2"
+  - main [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - link "← Back to Dashboard" [ref=e18] [cursor=pointer]:
+            - /url: /
+          - heading "Sprint Planning" [level=1] [ref=e19]
+          - paragraph [ref=e20]: TechStart Labs · 2026-04-20T09:00:00Z
+        - generic [ref=e21]:
+          - button "Regenerate Briefing" [ref=e23] [cursor=pointer]
+          - link "Post-Call Review" [ref=e24] [cursor=pointer]:
+            - /url: /post-call/d32b6dbc-53db-4150-b16e-8a7176986f44
+      - generic [ref=e25]:
+        - heading "Recommended Questions" [level=2] [ref=e26]
+        - list [ref=e27]:
+          - listitem [ref=e28]: What are the current priorities and expectations?
+          - listitem [ref=e29]: Are there any upcoming deadlines we should be aware of?
+          - listitem [ref=e30]: What are the key outcomes expected from this meeting?

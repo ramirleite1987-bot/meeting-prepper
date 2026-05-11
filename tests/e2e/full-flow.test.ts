@@ -27,8 +27,11 @@ vi.mock('../../src/db/index.js', () => {
   const queries = {
     getAllClients: () => testDb.prepare('SELECT * FROM clients ORDER BY updated_at DESC'),
     getClientById: () => testDb.prepare('SELECT * FROM clients WHERE id = ?'),
+    getClientByName: () => testDb.prepare('SELECT * FROM clients WHERE lower(name) = lower(?)'),
     insertClient: () =>
-      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (@id, @name, @project)'),
+      testDb.prepare(
+        'INSERT INTO clients (id, name, kind, project, aliases) VALUES (@id, @name, @kind, @project, @aliases)',
+      ),
     updateClient: () =>
       testDb.prepare(
         'UPDATE clients SET name = @name, project = @project, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -56,6 +59,13 @@ vi.mock('../../src/db/index.js', () => {
       ),
     getMeetingSourcesByMeeting: () =>
       testDb.prepare('SELECT * FROM meeting_sources WHERE meeting_id = ?'),
+    upsertMeetingSource: () =>
+      testDb.prepare(
+        `INSERT INTO meeting_sources (id, meeting_id, source, external_id, summary, decisions, risks, raw_data)
+         VALUES (@id, @meetingId, @source, @externalId, @summary, @decisions, @risks, @rawData)
+         ON CONFLICT(meeting_id, source, external_id) WHERE external_id IS NOT NULL
+         DO UPDATE SET summary = excluded.summary, decisions = excluded.decisions, risks = excluded.risks, raw_data = excluded.raw_data`,
+      ),
     insertActionItem: () =>
       testDb.prepare(
         'INSERT INTO action_items (id, meeting_id, source, title, description, owner, deadline, priority, context_hash) VALUES (@id, @meetingId, @source, @title, @description, @owner, @deadline, @priority, @contextHash)',
@@ -113,6 +123,10 @@ vi.mock('../../src/config.js', () => ({
     databasePath: ':memory:',
     logLevel: 'error',
     linearWebhookSecret: 'test-secret',
+    gogBin: 'gog',
+    gogGmailLabel: 'Processes',
+    googleSyncLookbackDays: 30,
+    googleSyncMaxResults: 25,
   },
 }));
 
@@ -174,7 +188,23 @@ const mockHandleLinearUpdate = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../src/services/client-context.service.js', () => ({
   ClientContextService: vi.fn().mockImplementation(() => ({
+    registerAdapter: vi.fn(),
     getClientContext: mockGetClientContext,
+  })),
+}));
+
+vi.mock('../../src/services/google-context.service.js', () => ({
+  GoogleContextService: vi.fn().mockImplementation(() => ({
+    getStatus: vi.fn().mockResolvedValue({ available: true, accountConfigured: false }),
+    sync: vi.fn().mockResolvedValue({ imported: 0, clientsChecked: 0, errors: [] }),
+  })),
+}));
+
+vi.mock('../../src/services/meeting-context.service.js', () => ({
+  MeetingContextService: vi.fn().mockImplementation(() => ({
+    searchCandidates: vi.fn().mockResolvedValue([]),
+    attachSelections: vi.fn().mockResolvedValue(0),
+    getAttachedContextEntries: vi.fn().mockReturnValue([]),
   })),
 }));
 

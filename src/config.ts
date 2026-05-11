@@ -17,6 +17,12 @@ const configSchema = z.object({
 
   granolaMcpServerUrl: z.string().url().optional(),
 
+  gogBin: z.string().default('gog'),
+  gogAccount: z.string().optional(),
+  gogGmailLabel: z.string().default('Processes'),
+  googleSyncLookbackDays: z.coerce.number().int().positive().default(30),
+  googleSyncMaxResults: z.coerce.number().int().positive().default(25),
+
   linearApiKey: z.string().optional(),
   linearTeamId: z.string().optional(),
   linearWebhookSecret: z.string().optional(),
@@ -35,6 +41,11 @@ function loadConfig(): Config {
     calendarIcsUrl: process.env.CALENDAR_ICS_URL || undefined,
     krispMcpServerUrl: process.env.KRISP_MCP_SERVER_URL || undefined,
     granolaMcpServerUrl: process.env.GRANOLA_MCP_SERVER_URL || undefined,
+    gogBin: process.env.GOG_BIN,
+    gogAccount: process.env.GOG_ACCOUNT || undefined,
+    gogGmailLabel: process.env.GOG_GMAIL_LABEL,
+    googleSyncLookbackDays: process.env.GOOGLE_SYNC_LOOKBACK_DAYS,
+    googleSyncMaxResults: process.env.GOOGLE_SYNC_MAX_RESULTS,
     linearApiKey: process.env.LINEAR_API_KEY || undefined,
     linearTeamId: process.env.LINEAR_TEAM_ID || undefined,
     linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET || undefined,

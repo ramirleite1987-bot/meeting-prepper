@@ -9,6 +9,8 @@ vi.mock('@linear/sdk', () => ({
 const mockLinearClient = {
   viewer: Promise.resolve({ id: 'user-1' }),
   teams: vi.fn(),
+  projects: vi.fn(),
+  project: vi.fn(),
   createIssue: vi.fn(),
   updateIssue: vi.fn(),
   issue: vi.fn(),
@@ -38,6 +40,18 @@ describe('LinearAdapter', () => {
     adapter = new LinearAdapter();
 
     mockLinearClient.teams.mockResolvedValue({ nodes: [{ id: 'team-1' }] });
+    mockLinearClient.projects.mockResolvedValue({
+      nodes: [
+        {
+          id: 'project-1',
+          name: 'Implementation',
+          description: 'Delivery work',
+          content: 'Current scope',
+          url: 'https://linear.app/project/implementation',
+          updatedAt: new Date('2025-01-03'),
+        },
+      ],
+    });
     mockLinearClient.users.mockResolvedValue({ nodes: [] });
   });
 
@@ -121,6 +135,81 @@ describe('LinearAdapter', () => {
       expect(mockLinearClient.createIssue).toHaveBeenCalledWith(
         expect.objectContaining({ assigneeId: 'user-1' }),
       );
+    });
+
+    it('should create an issue in the selected project', async () => {
+      const issue = makeIssue();
+      mockLinearClient.createIssue.mockResolvedValue({ issue: Promise.resolve(issue) });
+      mockLinearClient.issue.mockResolvedValue(issue);
+
+      await adapter.createTask({
+        title: 'Task',
+        status: 'pending',
+        source: 'test',
+        metadata: { linearProjectId: 'project-1' },
+      });
+
+      expect(mockLinearClient.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ projectId: 'project-1' }),
+      );
+    });
+  });
+
+  describe('projects', () => {
+    beforeEach(async () => {
+      await adapter.initialize();
+    });
+
+    it('should list projects that can be selected for sync', async () => {
+      const projects = await adapter.listProjects();
+
+      expect(projects).toEqual([
+        {
+          id: 'project-1',
+          name: 'Implementation',
+          description: 'Delivery work',
+          content: 'Current scope',
+          url: 'https://linear.app/project/implementation',
+          updatedAt: new Date('2025-01-03'),
+        },
+      ]);
+      expect(mockLinearClient.projects).toHaveBeenCalledWith({ first: 50 });
+    });
+
+    it('should read project content and issues for prep context', async () => {
+      const project = {
+        id: 'project-1',
+        name: 'Implementation',
+        description: 'Delivery work',
+        content: 'Current scope',
+        url: 'https://linear.app/project/implementation',
+        updatedAt: new Date('2025-01-03'),
+        issues: vi.fn().mockResolvedValue({
+          nodes: [
+            makeIssue({
+              id: 'issue-1',
+              identifier: 'ENG-42',
+              title: 'Ship onboarding',
+              description: 'Finish onboarding flow',
+              url: 'https://linear.app/team/ENG-42',
+              updatedAt: new Date('2025-01-04'),
+            }),
+          ],
+        }),
+      };
+      mockLinearClient.project.mockResolvedValue(project);
+
+      const context = await adapter.getProjectContext('project-1');
+
+      expect(context.project.name).toBe('Implementation');
+      expect(context.issues).toEqual([
+        expect.objectContaining({
+          id: 'issue-1',
+          identifier: 'ENG-42',
+          title: 'Ship onboarding',
+        }),
+      ]);
+      expect(project.issues).toHaveBeenCalledWith({ first: 50 });
     });
   });
 

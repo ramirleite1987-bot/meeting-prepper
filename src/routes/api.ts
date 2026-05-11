@@ -1,9 +1,12 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
 import { queries } from '../db/index.js';
 import { BriefingService } from '../services/briefing.service.js';
 import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
+import { GoogleContextService } from '../services/google-context.service.js';
+import { LinearContextService } from '../services/linear-context.service.js';
+import { MeetingContextService, type MeetingContextSource } from '../services/meeting-context.service.js';
 import { SyncService } from '../services/sync.service.js';
 import { search as runSearch } from '../services/search.service.js';
 import {
@@ -15,6 +18,8 @@ import {
 import { buildAgenda } from '../services/agenda.service.js';
 import { formatBriefingAsMarkdown } from '../services/briefing-export.service.js';
 import { buildStats } from '../services/stats.service.js';
+import { DbExternalContextAdapter } from '../adapters/db-external-context.adapter.js';
+import { normalizeClientKind, serializeClientAliases } from '../services/client-aliases.js';
 import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
@@ -24,9 +29,13 @@ const router = Router();
 
 // Shared service instances
 const clientContextService = new ClientContextService();
+clientContextService.registerAdapter(new DbExternalContextAdapter());
 const briefingService = new BriefingService();
 const extractionService = new ExtractionService();
 const syncService = new SyncService();
+const googleContextService = new GoogleContextService();
+const linearContextService = new LinearContextService();
+const meetingContextService = new MeetingContextService();
 
 function param(req: Request, name: string): string {
   const val = req.params[name];
@@ -54,13 +63,24 @@ router.get(
 router.post(
   '/clients',
   asyncHandler((req, res) => {
-    const { name, project } = req.body as { name?: string; project?: string };
+    const { name, project, kind, aliases } = req.body as {
+      name?: string;
+      project?: string;
+      kind?: string;
+      aliases?: unknown;
+    };
     if (!name) {
       throw createError('name is required', 400);
     }
 
     const id = randomUUID();
-    queries.insertClient().run({ id, name, project: project ?? null });
+    queries.insertClient().run({
+      id,
+      name,
+      kind: normalizeClientKind(kind),
+      project: project ?? null,
+      aliases: serializeClientAliases(aliases),
+    });
     const client = queries.getClientById().get(id);
     res.status(201).json(client);
   }),
@@ -77,6 +97,18 @@ router.get(
   }),
 );
 
+router.delete(
+  '/clients/:id',
+  asyncHandler((req, res) => {
+    const client = queries.getClientById().get(param(req, 'id'));
+    if (!client) {
+      throw createError('Client not found', 404);
+    }
+    queries.deleteClient().run(param(req, 'id'));
+    res.json({ success: true });
+  }),
+);
+
 router.get(
   '/clients/:id/timeline',
   asyncHandler((req, res) => {
@@ -90,6 +122,30 @@ router.get(
 );
 
 // ──────────────────────────────────────────────
+// Linear Projects
+// ──────────────────────────────────────────────
+
+router.get('/linear/projects', asyncHandler(async (_req, res) => {
+  const projects = await linearContextService.listProjects();
+  res.json(projects);
+}));
+
+router.post('/clients/:id/linear-project/import', asyncHandler(async (req, res) => {
+  const client = queries.getClientById().get(param(req, 'id'));
+  if (!client) {
+    throw createError('Client not found', 404);
+  }
+
+  const { projectId } = req.body as { projectId?: string };
+  if (!projectId) {
+    throw createError('projectId is required', 400);
+  }
+
+  const result = await linearContextService.importProjectContext(param(req, 'id'), projectId);
+  res.json(result);
+}));
+
+// ──────────────────────────────────────────────
 // Meetings
 // ──────────────────────────────────────────────
 
@@ -99,11 +155,10 @@ router.get(
     const { status, clientId } = req.query as { status?: string; clientId?: string };
     let meetings;
     if (status) {
-      meetings = queries.getMeetingsByStatus().all(status);
+      meetings = queries.getMeetingsWithClient().all(status);
     } else if (clientId) {
       meetings = queries.getMeetingsByClient().all(clientId);
     } else {
-      // Return all meetings ordered by scheduled_at desc
       meetings = queries.getAllMeetings().all();
     }
     res.json(meetings);
@@ -171,7 +226,10 @@ router.post(
     }
 
     const clientName = client.name as string;
-    const context = await clientContextService.getClientContext(clientName);
+    const context = [
+      ...(await clientContextService.getClientContext(clientName)),
+      ...meetingContextService.getAttachedContextEntries(param(req, 'id')),
+    ];
     const briefing = await briefingService.generateBriefing(param(req, 'id'), clientName, context);
 
     logger.info('Briefing generated', { meetingId: param(req, 'id'), traceId: req.traceId });
@@ -184,6 +242,78 @@ router.post(
     res.json(briefing);
   }),
 );
+
+router.get('/meetings/:id/context-candidates', asyncHandler(async (req, res) => {
+  const meeting = queries.getMeetingById().get(param(req, 'id'));
+  if (!meeting) {
+    throw createError('Meeting not found', 404);
+  }
+
+  const source = req.query.source;
+  if (source !== 'krisp' && source !== 'granola') {
+    throw createError('source must be krisp or granola', 400);
+  }
+
+  const tags = typeof req.query.tags === 'string'
+    ? req.query.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+    : undefined;
+  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+  const candidates = await meetingContextService.searchCandidates({
+    source,
+    query: typeof req.query.query === 'string' ? req.query.query : undefined,
+    tags,
+    limit: Number.isFinite(limit) ? limit : undefined,
+  });
+
+  res.json(candidates);
+}));
+
+router.post('/meetings/:id/context-sources', asyncHandler(async (req, res) => {
+  const meeting = queries.getMeetingById().get(param(req, 'id'));
+  if (!meeting) {
+    throw createError('Meeting not found', 404);
+  }
+
+  const { selections } = req.body as {
+    selections?: Array<{ source?: string; externalId?: string }>;
+  };
+  if (!Array.isArray(selections)) {
+    throw createError('selections is required', 400);
+  }
+
+  const normalized = selections.map((selection) => {
+    if (
+      (selection.source !== 'krisp' && selection.source !== 'granola') ||
+      !selection.externalId
+    ) {
+      throw createError('Each selection needs source and externalId', 400);
+    }
+    return {
+      source: selection.source as MeetingContextSource,
+      externalId: selection.externalId,
+    };
+  });
+
+  const attached = await meetingContextService.attachSelections(param(req, 'id'), normalized);
+  res.status(201).json({ attached });
+}));
+
+// ──────────────────────────────────────────────
+// Google Context Sync
+// ──────────────────────────────────────────────
+
+router.get('/google/status', asyncHandler(async (_req, res) => {
+  res.json(await googleContextService.getStatus());
+}));
+
+router.post('/google/sync', asyncHandler(async (req, res) => {
+  const { clientId, lookbackDays } = req.body as {
+    clientId?: string;
+    lookbackDays?: number;
+  };
+  const result = await googleContextService.sync({ clientId, lookbackDays });
+  res.json(result);
+}));
 
 router.get(
   '/meetings/:id/briefing',
@@ -337,7 +467,10 @@ router.post(
       throw createError('Meeting not found', 404);
     }
 
-    const result = await syncService.syncActionItem(param(req, 'id'), param(req, 'itemId'));
+    const { projectId } = req.body as { projectId?: string };
+    const result = projectId
+      ? await syncService.syncActionItem(param(req, 'id'), param(req, 'itemId'), { projectId })
+      : await syncService.syncActionItem(param(req, 'id'), param(req, 'itemId'));
 
     logger.info('Action item synced', {
       meetingId: param(req, 'id'),
@@ -366,7 +499,10 @@ router.post(
       throw createError('Meeting not found', 404);
     }
 
-    const result = await syncService.syncAllActionItems(param(req, 'id'));
+    const { projectId } = req.body as { projectId?: string };
+    const result = projectId
+      ? await syncService.syncAllActionItems(param(req, 'id'), { projectId })
+      : await syncService.syncAllActionItems(param(req, 'id'));
 
     logger.info('All action items synced', {
       meetingId: param(req, 'id'),
@@ -490,4 +626,7 @@ export {
   briefingService,
   extractionService,
   syncService,
+  googleContextService,
+  linearContextService,
+  meetingContextService,
 };

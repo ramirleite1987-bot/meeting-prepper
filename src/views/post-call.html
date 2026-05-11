@@ -3,54 +3,56 @@
     <div>
       <a href="/" class="text-indigo-600 hover:text-indigo-800 text-sm">&larr; Back to Dashboard</a>
       <h1 class="text-2xl font-bold text-gray-900 mt-2">{{meeting.title}}</h1>
-      <p class="text-gray-500">{{clientName}} &middot; {{meeting.scheduled_at}}</p>
+      <p class="text-gray-500">{{meeting.client_name}} &middot; {{meeting.scheduled_at}}</p>
     </div>
     <div class="flex space-x-3">
       <a href="/briefing/{{meeting.id}}" class="px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded-lg hover:bg-indigo-50">Briefing</a>
-      <span class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-lg">Post-Call</span>
+      <a href="/post-call/{{meeting.id}}" class="px-4 py-2 text-sm text-white bg-indigo-600 rounded-lg">Post-Call</a>
     </div>
   </div>
 
-  <!-- Consolidated Summary -->
-  {{#if postCallSummary}}
+  <!-- Extract Button -->
+  <div class="bg-white shadow rounded-lg p-4 flex items-center justify-between">
+    <div>
+      <h2 class="text-sm font-semibold text-gray-700">Extract Post-Call Data</h2>
+      <p class="text-sm text-gray-500">Pull meeting notes from Krisp, Granola, or manual entry.</p>
+    </div>
+    <button
+      onclick="extractMeeting('{{meeting.id}}')"
+      class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition"
+    >Extract</button>
+  </div>
+
+  {{{postCallSectionsHtml}}}
+
+  {{#if hasPostCallSummary}}
   <section class="bg-white shadow rounded-lg p-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-3">Consolidated Summary</h2>
     <p class="text-gray-700 leading-relaxed">{{postCallSummary}}</p>
   </section>
   {{/if}}
 
-  <!-- Decisions -->
-  {{#if postCallDecisions}}
-  <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Decisions</h2>
-    <ul class="list-disc list-inside space-y-1 text-gray-700">
-      {{#each postCallDecisions}}
-      <li>{{this}}</li>
-      {{/each}}
-    </ul>
-  </section>
-  {{/if}}
-
-  <!-- Risks -->
-  {{#if postCallRisks}}
-  <section class="bg-white shadow rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">Risks &amp; Concerns</h2>
-    <ul class="list-disc list-inside space-y-1 text-gray-700">
-      {{#each postCallRisks}}
-      <li>{{this}}</li>
-      {{/each}}
-    </ul>
-  </section>
-  {{/if}}
-
-  <!-- Action Items -->
   {{#if actionItems}}
   <section class="bg-white shadow rounded-lg p-6">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
       <h2 class="text-lg font-semibold text-gray-800">Action Items</h2>
-      <form method="POST" action="/api/meetings/{{meeting.id}}/sync-all">
-        <button type="submit" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Sync All to Linear</button>
-      </form>
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <select
+          id="linear-project-select-{{meeting.id}}"
+          data-linear-project-select
+          class="min-w-56 border-gray-300 rounded-lg shadow-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="">No Linear project</option>
+        </select>
+        <button
+          onclick="importLinearProject('{{meeting.client_id}}', '{{meeting.id}}')"
+          class="px-4 py-2 text-sm border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50"
+        >Import Project Context</button>
+        <button
+          onclick="syncAll('{{meeting.id}}')"
+          class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >Sync All to Linear</button>
+      </div>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-gray-200">
@@ -66,7 +68,7 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           {{#each actionItems}}
-          <tr>
+          <tr id="action-item-{{this.id}}">
             <td class="px-4 py-3 text-sm text-gray-900">{{this.title}}</td>
             <td class="px-4 py-3 text-sm text-gray-600">{{this.owner}}</td>
             <td class="px-4 py-3 text-sm text-gray-600">{{this.deadline}}</td>
@@ -78,9 +80,10 @@
             </td>
             <td class="px-4 py-3 text-sm text-gray-600">{{this.status}}</td>
             <td class="px-4 py-3 text-sm text-right">
-              <form method="POST" action="/api/meetings/{{meeting.id}}/action-items/{{this.id}}/sync" class="inline">
-                <button type="submit" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">Sync to Linear</button>
-              </form>
+              <button
+                onclick="syncItem('{{this.meeting_id}}', '{{this.id}}')"
+                class="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+              >Sync to Linear</button>
             </td>
           </tr>
           {{/each}}
@@ -93,7 +96,7 @@
   {{#if noPostCall}}
   <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
     <p class="text-yellow-800">No post-call review is available yet.</p>
-    <p class="text-yellow-600 text-sm mt-2">Post-call data will be available after meeting notes are extracted.</p>
+    <p class="text-yellow-600 text-sm mt-2">Click "Extract" above to pull data from connected sources, or post-call data will appear after meeting notes are extracted.</p>
   </div>
   {{/if}}
 </div>

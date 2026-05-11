@@ -1,0 +1,6 @@
+
+> meeting-prepper@0.1.0 dev
+> tsx watch src/index.ts
+
+{"timestamp":"2026-05-03T21:43:56.885Z","level":"info","message":"Database initialized","path":"./data/meeting-prepper.db"}
+{"timestamp":"2026-05-03T21:43:56.892Z","level":"info","message":"Server started","port":3000,"env":"development"}

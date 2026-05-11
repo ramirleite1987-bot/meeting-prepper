@@ -30,6 +30,29 @@ export interface ActionItem {
   metadata?: Record<string, unknown>;
 }
 
+export interface LinearProjectSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  content?: string | null;
+  url?: string;
+  updatedAt: Date;
+}
+
+export interface LinearIssueContext {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string | null;
+  url?: string;
+  updatedAt: Date;
+}
+
+export interface LinearProjectContext {
+  project: LinearProjectSummary;
+  issues: LinearIssueContext[];
+}
+
 export interface MeetingNotes {
   meetingId: string;
   title: string;

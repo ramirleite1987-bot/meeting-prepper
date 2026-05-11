@@ -34,6 +34,7 @@ vi.mock('../../src/db/index.js', () => {
 
   const queries = {
     getClientById: () => testDb.prepare('SELECT * FROM clients WHERE id = ?'),
+    getClientByName: () => testDb.prepare('SELECT * FROM clients WHERE lower(name) = lower(?)'),
     getAllClients: () => testDb.prepare('SELECT * FROM clients ORDER BY updated_at DESC'),
     getMeetingById: () => testDb.prepare('SELECT * FROM meetings WHERE id = ?'),
     getMeetingsByClient: () =>
@@ -41,7 +42,9 @@ vi.mock('../../src/db/index.js', () => {
     getMeetingsByStatus: () =>
       testDb.prepare('SELECT * FROM meetings WHERE status = ? ORDER BY scheduled_at ASC'),
     insertClient: () =>
-      testDb.prepare('INSERT INTO clients (id, name, project) VALUES (@id, @name, @project)'),
+      testDb.prepare(
+        'INSERT INTO clients (id, name, kind, project, aliases) VALUES (@id, @name, @kind, @project, @aliases)',
+      ),
     insertMeeting: () =>
       testDb.prepare(
         'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (@id, @clientId, @title, @scheduledAt, @status)',
@@ -118,6 +121,10 @@ vi.mock('../../src/config.js', () => ({
     linearApiKey: undefined,
     krispMcpServerUrl: undefined,
     granolaMcpServerUrl: undefined,
+    gogBin: 'gog',
+    gogGmailLabel: 'Processes',
+    googleSyncLookbackDays: 30,
+    googleSyncMaxResults: 25,
   },
 }));
 
