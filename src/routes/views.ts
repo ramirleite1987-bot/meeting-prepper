@@ -4,12 +4,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { queries } from '../db/index.js';
-import {
-  clientContextService,
-  briefingService,
-  meetingContextService,
-} from './api.js';
+import { clientContextService, briefingService, meetingContextService } from './api.js';
 import { search as runSearch } from '../services/search.service.js';
+import { buildAgendaViewData } from './view-renderers/agenda.js';
+import { buildSearchViewData } from './view-renderers/search.js';
 import {
   listActionItems,
   listOwners,
@@ -49,50 +47,74 @@ function renderSimpleTemplate(template: string, data: Record<string, unknown>): 
   let result = template;
 
   // Handle {{#each items}} ... {{/each}} first – this expands items & processes inner templates per-item
-  result = result.replace(/\{\{#each\s+([\w.]+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (_match, key: string, block: string) => {
-    const arr = resolveValue(data, key);
-    if (!Array.isArray(arr) || arr.length === 0) return '';
-    return arr.map((item: unknown) => {
-      let rendered = block;
-      if (typeof item === 'object' && item !== null) {
-        const obj = item as Record<string, unknown>;
-        // Process inner {{#if this.prop}} blocks with item context
-        rendered = rendered.replace(/\{\{#if\s+this\.([\w]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_m: string, prop: string, innerBlock: string) => {
-          const val = obj[prop];
-          const [ifBlock, elseBlock] = innerBlock.split('{{else}}');
-          return isTruthy(val) ? ifBlock : (elseBlock ?? '');
-        });
-        // Process inner {{#each this.prop}} blocks with item context
-        rendered = rendered.replace(/\{\{#each\s+this\.([\w]+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (_m: string, prop: string, innerBlock: string) => {
-          const innerArr = obj[prop];
-          if (!Array.isArray(innerArr)) return '';
-          return innerArr.map((innerItem: unknown) => {
-            let innerRendered = innerBlock;
-            if (typeof innerItem === 'object' && innerItem !== null) {
-              const innerObj = innerItem as Record<string, unknown>;
-              innerRendered = innerRendered.replace(/\{\{this\.([\w]+)\}\}/g, (_m2: string, p: string) => escapeHtml(String(innerObj[p] ?? '')));
-            }
-            innerRendered = innerRendered.replace(/\{\{this\}\}/g, escapeHtml(String(innerItem)));
-            return innerRendered;
-          }).join('');
-        });
-        // Replace {{this.prop}} values
-        rendered = rendered.replace(/\{\{this\.([\w]+)\}\}/g, (_m: string, prop: string) => escapeHtml(String(obj[prop] ?? '')));
-      }
-      rendered = rendered.replace(/\{\{this\}\}/g, escapeHtml(String(item)));
-      return rendered;
-    }).join('');
-  });
+  result = result.replace(
+    /\{\{#each\s+([\w.]+)\}\}([\s\S]*?)\{\{\/each\}\}/g,
+    (_match, key: string, block: string) => {
+      const arr = resolveValue(data, key);
+      if (!Array.isArray(arr) || arr.length === 0) return '';
+      return arr
+        .map((item: unknown) => {
+          let rendered = block;
+          if (typeof item === 'object' && item !== null) {
+            const obj = item as Record<string, unknown>;
+            // Process inner {{#if this.prop}} blocks with item context
+            rendered = rendered.replace(
+              /\{\{#if\s+this\.([\w]+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
+              (_m: string, prop: string, innerBlock: string) => {
+                const val = obj[prop];
+                const [ifBlock, elseBlock] = innerBlock.split('{{else}}');
+                return isTruthy(val) ? ifBlock : (elseBlock ?? '');
+              },
+            );
+            // Process inner {{#each this.prop}} blocks with item context
+            rendered = rendered.replace(
+              /\{\{#each\s+this\.([\w]+)\}\}([\s\S]*?)\{\{\/each\}\}/g,
+              (_m: string, prop: string, innerBlock: string) => {
+                const innerArr = obj[prop];
+                if (!Array.isArray(innerArr)) return '';
+                return innerArr
+                  .map((innerItem: unknown) => {
+                    let innerRendered = innerBlock;
+                    if (typeof innerItem === 'object' && innerItem !== null) {
+                      const innerObj = innerItem as Record<string, unknown>;
+                      innerRendered = innerRendered.replace(
+                        /\{\{this\.([\w]+)\}\}/g,
+                        (_m2: string, p: string) => escapeHtml(String(innerObj[p] ?? '')),
+                      );
+                    }
+                    innerRendered = innerRendered.replace(
+                      /\{\{this\}\}/g,
+                      escapeHtml(String(innerItem)),
+                    );
+                    return innerRendered;
+                  })
+                  .join('');
+              },
+            );
+            // Replace {{this.prop}} values
+            rendered = rendered.replace(/\{\{this\.([\w]+)\}\}/g, (_m: string, prop: string) =>
+              escapeHtml(String(obj[prop] ?? '')),
+            );
+          }
+          rendered = rendered.replace(/\{\{this\}\}/g, escapeHtml(String(item)));
+          return rendered;
+        })
+        .join('');
+    },
+  );
 
   // Handle {{#if value}} ... {{else}} ... {{/if}} (top-level only now, inner ones handled in each)
-  result = result.replace(/\{\{#if\s+([\w.]+)\}\}([\s\S]*?)\{\{\/if\}\}/g, (_match, key: string, block: string) => {
-    const val = resolveValue(data, key);
-    const [ifBlock, elseBlock] = block.split('{{else}}');
-    if (isTruthy(val)) {
-      return ifBlock;
-    }
-    return elseBlock ?? '';
-  });
+  result = result.replace(
+    /\{\{#if\s+([\w.]+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
+    (_match, key: string, block: string) => {
+      const val = resolveValue(data, key);
+      const [ifBlock, elseBlock] = block.split('{{else}}');
+      if (isTruthy(val)) {
+        return ifBlock;
+      }
+      return elseBlock ?? '';
+    },
+  );
 
   // Handle {{{key}}} raw HTML replacements FIRST (triple braces for unescaped output)
   result = result.replace(/\{\{\{([\w.]+)\}\}\}/g, (_match, key: string) => {
@@ -138,12 +160,18 @@ function escapeHtml(str: string): string {
 router.get('/', (_req: Request, res: Response, next: NextFunction) => {
   try {
     const meetings = queries.getMeetingsWithClient().all('scheduled') as Record<string, unknown>[];
-    const completedMeetings = queries.getMeetingsWithClient().all('completed') as Record<string, unknown>[];
-    const allMeetings = [...meetings, ...completedMeetings].map(m => ({
+    const completedMeetings = queries.getMeetingsWithClient().all('completed') as Record<
+      string,
+      unknown
+    >[];
+    const allMeetings = [...meetings, ...completedMeetings].map((m) => ({
       ...m,
-      status_class: m.status === 'completed' ? 'bg-green-100 text-green-800' :
-                     m.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                     'bg-blue-100 text-blue-800',
+      status_class:
+        m.status === 'completed'
+          ? 'bg-green-100 text-green-800'
+          : m.status === 'in_progress'
+            ? 'bg-yellow-100 text-yellow-800'
+            : 'bg-blue-100 text-blue-800',
     }));
     const clients = queries.getAllClients().all() as Record<string, unknown>[];
 
@@ -186,70 +214,9 @@ router.get('/stats', (_req: Request, res: Response, next: NextFunction) => {
 // Agenda view
 // ──────────────────────────────────────────────
 
-function formatStartsIn(minutes: number | null): string {
-  if (minutes === null) return '';
-  const abs = Math.abs(minutes);
-  const sign = minutes < 0 ? 'ago' : '';
-  if (abs < 60) return `in ${minutes} min`.replace('in -', `${abs} min ${sign} `).trim();
-  const hours = Math.round(abs / 60);
-  if (hours < 24) return minutes < 0 ? `${hours}h ago` : `in ${hours}h`;
-  const days = Math.round(hours / 24);
-  return minutes < 0 ? `${days}d ago` : `in ${days}d`;
-}
-
-function bucketColor(bucket: string): string {
-  switch (bucket) {
-    case 'overdue':
-      return 'bg-red-50 border-red-200';
-    case 'today':
-      return 'bg-indigo-50 border-indigo-200';
-    case 'tomorrow':
-      return 'bg-blue-50 border-blue-200';
-    case 'this_week':
-      return 'bg-white border-gray-200';
-    case 'later':
-      return 'bg-white border-gray-200';
-    default:
-      return 'bg-gray-50 border-gray-200';
-  }
-}
-
 router.get('/agenda', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const agenda = buildAgenda();
-
-    const next = agenda.next
-      ? {
-          ...agenda.next,
-          starts_in_label: formatStartsIn(agenda.next.starts_in_minutes),
-          scheduled_label: agenda.next.scheduled_at
-            ? new Date(agenda.next.scheduled_at).toLocaleString()
-            : 'Unscheduled',
-          client_name: agenda.next.client_name ?? '—',
-        }
-      : null;
-
-    const buckets = agenda.buckets.map((b) => ({
-      ...b,
-      colorClass: bucketColor(b.bucket),
-      meetings: b.meetings.map((m) => ({
-        ...m,
-        scheduled_label: m.scheduled_at ? new Date(m.scheduled_at).toLocaleString() : 'Unscheduled',
-        starts_in_label: formatStartsIn(m.starts_in_minutes),
-        client_name: m.client_name ?? '—',
-        is_completed: m.status === 'completed',
-        needs_briefing: !m.has_briefing && m.status !== 'completed',
-        needs_post_call: m.status === 'completed' && !m.has_post_call,
-      })),
-    }));
-
-    const data = {
-      hasNext: next !== null,
-      next,
-      hasBuckets: buckets.length > 0,
-      buckets,
-    };
-
+    const data = buildAgendaViewData(buildAgenda());
     const template = loadTemplate('agenda');
     const content = renderSimpleTemplate(template, data);
     const html = renderLayout('Agenda', content);
@@ -356,52 +323,10 @@ router.get('/search', (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = ((req.query.q as string | undefined) ?? '').slice(0, 200);
     const data = runSearch(q);
-
-    const grouped = {
-      query: data.query,
-      total: data.total,
-      hasQuery: data.query.length > 0,
-      hasResults: data.total > 0,
-      counts: data.counts,
-      clients: data.results
-        .filter((r) => r.type === 'client')
-        .map((r) => ({ ...r, snippet: r.snippet })),
-      meetings: data.results
-        .filter((r) => r.type === 'meeting')
-        .map((r) => ({
-          ...r,
-          status: (r.meta as { status?: string }).status ?? '',
-          clientName: (r.meta as { clientName?: string | null }).clientName ?? '—',
-        })),
-      actionItems: data.results
-        .filter((r) => r.type === 'action_item')
-        .map((r) => {
-          const meta = r.meta as {
-            owner?: string | null;
-            priority?: string;
-            status?: string;
-            clientName?: string | null;
-            meetingTitle?: string | null;
-          };
-          return {
-            ...r,
-            owner: meta.owner ?? 'Unassigned',
-            priority: meta.priority ?? 'medium',
-            status: meta.status ?? 'pending',
-            clientName: meta.clientName ?? '—',
-            meetingTitle: meta.meetingTitle ?? '',
-            priorityClass:
-              meta.priority === 'high'
-                ? 'bg-red-100 text-red-800'
-                : meta.priority === 'low'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-yellow-100 text-yellow-800',
-          };
-        }),
-    };
+    const viewData = buildSearchViewData(data);
 
     const template = loadTemplate('search');
-    const content = renderSimpleTemplate(template, grouped);
+    const content = renderSimpleTemplate(template, viewData);
     const html = renderLayout(`Search${data.query ? ` — ${data.query}` : ''}`, content);
 
     res.type('html').send(html);
@@ -416,9 +341,14 @@ router.get('/search', (req: Request, res: Response, next: NextFunction) => {
 
 router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const meeting = queries.getMeetingWithClient().get(param(req, 'id')) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingWithClient().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
-      res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
+      res
+        .status(404)
+        .type('html')
+        .send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
     }
 
@@ -443,12 +373,16 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
           for (const { key, title } of sectionOrder) {
             if (s[key] && s[key].items && s[key].items.length > 0) {
               briefingSections.push({ title, items: s[key].items.map(String) });
-              const itemsHtml = s[key].items.map((i: unknown) => `<li>${escapeHtml(String(i))}</li>`).join('');
+              const itemsHtml = s[key].items
+                .map((i: unknown) => `<li>${escapeHtml(String(i))}</li>`)
+                .join('');
               briefingHtml += `<section class="bg-white shadow rounded-lg p-6"><h2 class="text-lg font-semibold text-gray-800 mb-3">${escapeHtml(title)}</h2><ul class="list-disc list-inside space-y-1 text-gray-700">${itemsHtml}</ul></section>`;
             }
           }
         }
-      } catch { /* corrupted data */ }
+      } catch {
+        /* corrupted data */
+      }
     }
 
     const template = loadTemplate('briefing');
@@ -467,15 +401,23 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
 
 router.post('/briefing/:id/prepare', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const meeting = queries.getMeetingWithClient().get(param(req, 'id')) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingWithClient().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
-      res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
+      res
+        .status(404)
+        .type('html')
+        .send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
     }
 
     const clientName = meeting.client_name as string;
     if (!clientName) {
-      res.status(404).type('html').send(renderLayout('Error', '<p class="text-gray-500">Client not found.</p>'));
+      res
+        .status(404)
+        .type('html')
+        .send(renderLayout('Error', '<p class="text-gray-500">Client not found.</p>'));
       return;
     }
 
@@ -500,7 +442,9 @@ router.post('/briefing/prepare', async (req: Request, res: Response, next: NextF
       return;
     }
 
-    const meeting = queries.getMeetingWithClient().get(meetingId) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingWithClient().get(meetingId) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
       res.redirect('/');
       return;
@@ -531,16 +475,25 @@ router.post('/briefing/prepare', async (req: Request, res: Response, next: NextF
 
 router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const client = queries.getClientById().get(param(req, 'id')) as Record<string, unknown> | undefined;
+    const client = queries.getClientById().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!client) {
-      res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Client not found.</p>'));
+      res
+        .status(404)
+        .type('html')
+        .send(renderLayout('Not Found', '<p class="text-gray-500">Client not found.</p>'));
       return;
     }
 
     const timeline = clientContextService.getClientTimeline(param(req, 'id'));
     const events = timeline.map((evt) => {
       let parsed: Record<string, unknown> = {};
-      try { parsed = JSON.parse(evt.event_data); } catch { /* skip */ }
+      try {
+        parsed = JSON.parse(evt.event_data);
+      } catch {
+        /* skip */
+      }
 
       // Precompute the inline link HTML so the template can inject it via
       // {{{linksHtml}}} without nested {{#if}} blocks (the simple template
@@ -595,20 +548,32 @@ router.get('/clients/:id', (req: Request, res: Response, next: NextFunction) => 
 
 router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const meeting = queries.getMeetingWithClient().get(param(req, 'id')) as Record<string, unknown> | undefined;
+    const meeting = queries.getMeetingWithClient().get(param(req, 'id')) as
+      | Record<string, unknown>
+      | undefined;
     if (!meeting) {
-      res.status(404).type('html').send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
+      res
+        .status(404)
+        .type('html')
+        .send(renderLayout('Not Found', '<p class="text-gray-500">Meeting not found.</p>'));
       return;
     }
 
     let postCall: Record<string, unknown> | null = null;
     if (meeting.post_call_notes) {
-      try { postCall = JSON.parse(meeting.post_call_notes as string); } catch { /* corrupted data */ }
+      try {
+        postCall = JSON.parse(meeting.post_call_notes as string);
+      } catch {
+        /* corrupted data */
+      }
     }
 
     // Also gather consolidated data from meeting_sources
     if (!postCall) {
-      const sources = queries.getMeetingSourcesByMeeting().all(param(req, 'id')) as Record<string, unknown>[];
+      const sources = queries.getMeetingSourcesByMeeting().all(param(req, 'id')) as Record<
+        string,
+        unknown
+      >[];
       if (sources.length > 0) {
         const summaries: string[] = [];
         const decisions: string[] = [];
@@ -616,10 +581,18 @@ router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) =
         for (const src of sources) {
           if (src.summary) summaries.push(src.summary as string);
           if (src.decisions) {
-            try { decisions.push(...JSON.parse(src.decisions as string)); } catch { /* skip */ }
+            try {
+              decisions.push(...JSON.parse(src.decisions as string));
+            } catch {
+              /* skip */
+            }
           }
           if (src.risks) {
-            try { risks.push(...JSON.parse(src.risks as string)); } catch { /* skip */ }
+            try {
+              risks.push(...JSON.parse(src.risks as string));
+            } catch {
+              /* skip */
+            }
           }
         }
         if (summaries.length > 0 || decisions.length > 0 || risks.length > 0) {
@@ -643,22 +616,27 @@ router.get('/post-call/:id', (req: Request, res: Response, next: NextFunction) =
       }
       if (Array.isArray(postCall.decisions) && postCall.decisions.length > 0) {
         const items = postCall.decisions.map(String);
-        const itemsHtml = items.map(i => `<li>${escapeHtml(i)}</li>`).join('');
+        const itemsHtml = items.map((i) => `<li>${escapeHtml(i)}</li>`).join('');
         postCallSectionsHtml += `<section class="bg-white shadow rounded-lg p-6"><h2 class="text-lg font-semibold text-gray-800 mb-3">Decisions</h2><ul class="list-disc list-inside space-y-1 text-gray-700">${itemsHtml}</ul></section>`;
       }
       if (Array.isArray(postCall.risks) && postCall.risks.length > 0) {
         const items = postCall.risks.map(String);
-        const itemsHtml = items.map(i => `<li>${escapeHtml(i)}</li>`).join('');
+        const itemsHtml = items.map((i) => `<li>${escapeHtml(i)}</li>`).join('');
         postCallSectionsHtml += `<section class="bg-white shadow rounded-lg p-6"><h2 class="text-lg font-semibold text-gray-800 mb-3">Risks &amp; Concerns</h2><ul class="list-disc list-inside space-y-1 text-gray-700">${itemsHtml}</ul></section>`;
       }
     }
     const noPostCall = !postCall ? true : false;
 
-    const actionItems = (queries.getActionItemsByMeeting().all(param(req, 'id')) as Record<string, unknown>[]).map(item => ({
+    const actionItems = (
+      queries.getActionItemsByMeeting().all(param(req, 'id')) as Record<string, unknown>[]
+    ).map((item) => ({
       ...item,
-      priorityClass: item.priority === 'high' ? 'bg-red-100 text-red-800' :
-                     item.priority === 'low' ? 'bg-green-100 text-green-800' :
-                     'bg-yellow-100 text-yellow-800',
+      priorityClass:
+        item.priority === 'high'
+          ? 'bg-red-100 text-red-800'
+          : item.priority === 'low'
+            ? 'bg-green-100 text-green-800'
+            : 'bg-yellow-100 text-yellow-800',
     }));
 
     const template = loadTemplate('post-call');

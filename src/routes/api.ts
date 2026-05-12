@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import { Router, type Request } from 'express';
 import { randomUUID } from 'node:crypto';
 import { queries } from '../db/index.js';
 import { BriefingService } from '../services/briefing.service.js';
@@ -6,7 +6,10 @@ import { ClientContextService } from '../services/client-context.service.js';
 import { ExtractionService } from '../services/extraction.service.js';
 import { GoogleContextService } from '../services/google-context.service.js';
 import { LinearContextService } from '../services/linear-context.service.js';
-import { MeetingContextService, type MeetingContextSource } from '../services/meeting-context.service.js';
+import {
+  MeetingContextService,
+  type MeetingContextSource,
+} from '../services/meeting-context.service.js';
 import { SyncService } from '../services/sync.service.js';
 import { search as runSearch } from '../services/search.service.js';
 import {
@@ -125,25 +128,31 @@ router.get(
 // Linear Projects
 // ──────────────────────────────────────────────
 
-router.get('/linear/projects', asyncHandler(async (_req, res) => {
-  const projects = await linearContextService.listProjects();
-  res.json(projects);
-}));
+router.get(
+  '/linear/projects',
+  asyncHandler(async (_req, res) => {
+    const projects = await linearContextService.listProjects();
+    res.json(projects);
+  }),
+);
 
-router.post('/clients/:id/linear-project/import', asyncHandler(async (req, res) => {
-  const client = queries.getClientById().get(param(req, 'id'));
-  if (!client) {
-    throw createError('Client not found', 404);
-  }
+router.post(
+  '/clients/:id/linear-project/import',
+  asyncHandler(async (req, res) => {
+    const client = queries.getClientById().get(param(req, 'id'));
+    if (!client) {
+      throw createError('Client not found', 404);
+    }
 
-  const { projectId } = req.body as { projectId?: string };
-  if (!projectId) {
-    throw createError('projectId is required', 400);
-  }
+    const { projectId } = req.body as { projectId?: string };
+    if (!projectId) {
+      throw createError('projectId is required', 400);
+    }
 
-  const result = await linearContextService.importProjectContext(param(req, 'id'), projectId);
-  res.json(result);
-}));
+    const result = await linearContextService.importProjectContext(param(req, 'id'), projectId);
+    res.json(result);
+  }),
+);
 
 // ──────────────────────────────────────────────
 // Meetings
@@ -243,77 +252,93 @@ router.post(
   }),
 );
 
-router.get('/meetings/:id/context-candidates', asyncHandler(async (req, res) => {
-  const meeting = queries.getMeetingById().get(param(req, 'id'));
-  if (!meeting) {
-    throw createError('Meeting not found', 404);
-  }
-
-  const source = req.query.source;
-  if (source !== 'krisp' && source !== 'granola') {
-    throw createError('source must be krisp or granola', 400);
-  }
-
-  const tags = typeof req.query.tags === 'string'
-    ? req.query.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
-    : undefined;
-  const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
-  const candidates = await meetingContextService.searchCandidates({
-    source,
-    query: typeof req.query.query === 'string' ? req.query.query : undefined,
-    tags,
-    limit: Number.isFinite(limit) ? limit : undefined,
-  });
-
-  res.json(candidates);
-}));
-
-router.post('/meetings/:id/context-sources', asyncHandler(async (req, res) => {
-  const meeting = queries.getMeetingById().get(param(req, 'id'));
-  if (!meeting) {
-    throw createError('Meeting not found', 404);
-  }
-
-  const { selections } = req.body as {
-    selections?: Array<{ source?: string; externalId?: string }>;
-  };
-  if (!Array.isArray(selections)) {
-    throw createError('selections is required', 400);
-  }
-
-  const normalized = selections.map((selection) => {
-    if (
-      (selection.source !== 'krisp' && selection.source !== 'granola') ||
-      !selection.externalId
-    ) {
-      throw createError('Each selection needs source and externalId', 400);
+router.get(
+  '/meetings/:id/context-candidates',
+  asyncHandler(async (req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id'));
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
     }
-    return {
-      source: selection.source as MeetingContextSource,
-      externalId: selection.externalId,
-    };
-  });
 
-  const attached = await meetingContextService.attachSelections(param(req, 'id'), normalized);
-  res.status(201).json({ attached });
-}));
+    const source = req.query.source;
+    if (source !== 'krisp' && source !== 'granola') {
+      throw createError('source must be krisp or granola', 400);
+    }
+
+    const tags =
+      typeof req.query.tags === 'string'
+        ? req.query.tags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+        : undefined;
+    const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+    const candidates = await meetingContextService.searchCandidates({
+      source,
+      query: typeof req.query.query === 'string' ? req.query.query : undefined,
+      tags,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+
+    res.json(candidates);
+  }),
+);
+
+router.post(
+  '/meetings/:id/context-sources',
+  asyncHandler(async (req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id'));
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const { selections } = req.body as {
+      selections?: Array<{ source?: string; externalId?: string }>;
+    };
+    if (!Array.isArray(selections)) {
+      throw createError('selections is required', 400);
+    }
+
+    const normalized = selections.map((selection) => {
+      if (
+        (selection.source !== 'krisp' && selection.source !== 'granola') ||
+        !selection.externalId
+      ) {
+        throw createError('Each selection needs source and externalId', 400);
+      }
+      return {
+        source: selection.source as MeetingContextSource,
+        externalId: selection.externalId,
+      };
+    });
+
+    const attached = await meetingContextService.attachSelections(param(req, 'id'), normalized);
+    res.status(201).json({ attached });
+  }),
+);
 
 // ──────────────────────────────────────────────
 // Google Context Sync
 // ──────────────────────────────────────────────
 
-router.get('/google/status', asyncHandler(async (_req, res) => {
-  res.json(await googleContextService.getStatus());
-}));
+router.get(
+  '/google/status',
+  asyncHandler(async (_req, res) => {
+    res.json(await googleContextService.getStatus());
+  }),
+);
 
-router.post('/google/sync', asyncHandler(async (req, res) => {
-  const { clientId, lookbackDays } = req.body as {
-    clientId?: string;
-    lookbackDays?: number;
-  };
-  const result = await googleContextService.sync({ clientId, lookbackDays });
-  res.json(result);
-}));
+router.post(
+  '/google/sync',
+  asyncHandler(async (req, res) => {
+    const { clientId, lookbackDays } = req.body as {
+      clientId?: string;
+      lookbackDays?: number;
+    };
+    const result = await googleContextService.sync({ clientId, lookbackDays });
+    res.json(result);
+  }),
+);
 
 router.get(
   '/meetings/:id/briefing',

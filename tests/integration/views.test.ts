@@ -268,6 +268,31 @@ describe('HTML View Integration Tests', () => {
     });
   });
 
+  describe('Agenda view', () => {
+    it('GET /agenda renders bucketed meetings without raw template syntax', async () => {
+      seedData();
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m2', 'c1', 'Next planning sync', future, 'scheduled');
+
+      const res = await request(app).get('/agenda').expect(200);
+
+      expect(res.text).toContain('Agenda');
+      expect(res.text).toContain('Up next');
+      expect(res.text).toContain('Next planning sync');
+      expect(res.text).toContain('Q2 Review');
+      expect(res.text).toContain('Acme Corp');
+      expect(res.text).not.toMatch(/\{\{#if/);
+      expect(res.text).not.toMatch(/\{\{#each/);
+      expect(res.text).not.toMatch(/\{\{\/if/);
+      expect(res.text).not.toMatch(/\{\{\/each/);
+      expect(res.text).not.toMatch(/\{\{else/);
+    });
+  });
+
   describe('Briefing view', () => {
     it('GET /briefing/:id renders briefing sections from real BriefingService structure', async () => {
       seedData();
@@ -497,6 +522,49 @@ describe('HTML View Integration Tests', () => {
     it('GET /clients/:id returns 404 for missing client', async () => {
       const res = await request(app).get('/clients/nonexistent').expect(404);
       expect(res.text).toContain('Client not found');
+    });
+  });
+
+  describe('Search view', () => {
+    it('GET /search renders grouped matches without raw template syntax', async () => {
+      seedData();
+      testDb.prepare('UPDATE meetings SET title = ? WHERE id = ?').run('Q2 Roadmap Review', 'm1');
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, description, owner, priority, context_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          'ai-1',
+          'm1',
+          'manual',
+          'Update roadmap doc',
+          'Reflect Q2 priorities',
+          'alice',
+          'high',
+          'hash-1',
+        );
+
+      const res = await request(app).get('/search?q=roadmap').expect(200);
+
+      expect(res.text).toContain('Q2 Roadmap Review');
+      expect(res.text).toContain('Update roadmap doc');
+      expect(res.text).toContain('Action items');
+      expect(res.text).not.toContain('No matches for');
+      expect(res.text).not.toMatch(/\{\{#if/);
+      expect(res.text).not.toMatch(/\{\{#each/);
+      expect(res.text).not.toMatch(/\{\{\/if/);
+      expect(res.text).not.toMatch(/\{\{\/each/);
+      expect(res.text).not.toMatch(/\{\{else/);
+    });
+
+    it('GET /search shows the empty prompt without raw template syntax', async () => {
+      const res = await request(app).get('/search').expect(200);
+
+      expect(res.text).toContain('Type a query above');
+      expect(res.text).not.toMatch(/\{\{#if/);
+      expect(res.text).not.toMatch(/\{\{#each/);
+      expect(res.text).not.toMatch(/\{\{\/if/);
+      expect(res.text).not.toMatch(/\{\{\/each/);
     });
   });
 });
