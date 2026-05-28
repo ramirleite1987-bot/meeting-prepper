@@ -33,6 +33,27 @@ function buildSnippet(text: string | null | undefined, term: string): string {
   return prefix + text.slice(start, end) + suffix;
 }
 
+function briefingItemsAsText(briefingJson: string | null): string {
+  if (!briefingJson) return '';
+  let parsed: { sections?: Record<string, { items?: unknown[] }> };
+  try {
+    parsed = JSON.parse(briefingJson);
+  } catch {
+    return '';
+  }
+  const sections = parsed.sections;
+  if (!sections || typeof sections !== 'object') return '';
+  const parts: string[] = [];
+  for (const section of Object.values(sections)) {
+    if (section && Array.isArray(section.items)) {
+      for (const item of section.items) {
+        if (item !== null && item !== undefined) parts.push(String(item));
+      }
+    }
+  }
+  return parts.join(' • ');
+}
+
 export function search(query: string): SearchResponse {
   const trimmed = query.trim();
   if (!trimmed) {
@@ -122,9 +143,11 @@ export function search(query: string): SearchResponse {
   }
 
   for (const m of meetingRows) {
-    const briefingHit = m.briefing && m.briefing.toLowerCase().includes(trimmed.toLowerCase());
-    const snippet = briefingHit
-      ? buildSnippet(m.briefing, trimmed)
+    const briefingText = briefingItemsAsText(m.briefing);
+    const briefingTextHit =
+      briefingText && briefingText.toLowerCase().includes(trimmed.toLowerCase());
+    const snippet = briefingTextHit
+      ? buildSnippet(briefingText, trimmed)
       : `${m.client_name ?? 'Unknown client'} • ${m.status}`;
     results.push({
       type: 'meeting',
