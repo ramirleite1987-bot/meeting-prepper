@@ -117,16 +117,18 @@ vi.mock('../../src/config.js', () => ({
 }));
 
 // Mock Linear adapter to avoid real API calls
-const mockCreateTask = vi.fn().mockImplementation((task: { title: string; meetingId?: string }) => ({
-  id: `linear-${randomUUID().slice(0, 8)}`,
-  externalId: 'LIN-123',
-  source: 'linear',
-  title: task.title,
-  status: 'todo',
-  meetingId: task.meetingId,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-}));
+const mockCreateTask = vi
+  .fn()
+  .mockImplementation((task: { title: string; meetingId?: string }) => ({
+    id: `linear-${randomUUID().slice(0, 8)}`,
+    externalId: 'LIN-123',
+    source: 'linear',
+    title: task.title,
+    status: 'todo',
+    meetingId: task.meetingId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
 
 vi.mock('../../src/adapters/linear.adapter.js', () => ({
   LinearAdapter: vi.fn().mockImplementation(() => ({

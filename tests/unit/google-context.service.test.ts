@@ -57,23 +57,26 @@ vi.mock('../../src/db/index.js', () => {
 });
 
 const { GoogleContextService } = await import('../../src/services/google-context.service.js');
-const { DbExternalContextAdapter } = await import('../../src/adapters/db-external-context.adapter.js');
+const { DbExternalContextAdapter } =
+  await import('../../src/adapters/db-external-context.adapter.js');
 const { buildAliasTerms } = await import('../../src/services/client-aliases.js');
 
 describe('GoogleContextService', () => {
   beforeEach(() => {
     testDb = createTestDb();
-    testDb.prepare('INSERT INTO clients (id, name, kind, project, aliases) VALUES (?, ?, ?, ?, ?)').run(
-      'c1',
-      'Acme',
-      'prospect',
-      'Launch',
-      JSON.stringify({
-        domains: ['acme.com'],
-        emails: ['buyer@acme.com'],
-        keywords: ['pricing review'],
-      }),
-    );
+    testDb
+      .prepare('INSERT INTO clients (id, name, kind, project, aliases) VALUES (?, ?, ?, ?, ?)')
+      .run(
+        'c1',
+        'Acme',
+        'prospect',
+        'Launch',
+        JSON.stringify({
+          domains: ['acme.com'],
+          emails: ['buyer@acme.com'],
+          keywords: ['pricing review'],
+        }),
+      );
   });
 
   it('builds Gmail queries constrained to the Processes label and aliases', () => {
@@ -98,7 +101,8 @@ describe('GoogleContextService', () => {
   });
 
   it('imports Gmail and matching Calendar rows with idempotent external IDs', async () => {
-    const runJson = vi.fn()
+    const runJson = vi
+      .fn()
       .mockResolvedValueOnce([
         {
           id: 'gmail-1',
@@ -128,14 +132,18 @@ describe('GoogleContextService', () => {
   });
 
   it('maps DB-backed external context to recency-sorted context entries', async () => {
-    testDb.prepare(
-      `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
+    testDb
+      .prepare(
+        `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run('e1', 'c1', 'gmail', 'g1', 'Older', 'old', '2026-04-01T00:00:00.000Z', '{}');
-    testDb.prepare(
-      `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
+      )
+      .run('e1', 'c1', 'gmail', 'g1', 'Older', 'old', '2026-04-01T00:00:00.000Z', '{}');
+    testDb
+      .prepare(
+        `INSERT INTO external_context (id, client_id, source, external_id, title, content, occurred_at, metadata)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run('e2', 'c1', 'calendar', 'c1', 'Newer', 'new', '2026-04-03T00:00:00.000Z', '{}');
+      )
+      .run('e2', 'c1', 'calendar', 'c1', 'Newer', 'new', '2026-04-03T00:00:00.000Z', '{}');
 
     const adapter = new DbExternalContextAdapter();
     const entries = await adapter.getClientContext('Acme');

@@ -26,7 +26,9 @@ describe('GogExecutor', () => {
     });
 
     const executor = new GogExecutor();
-    await expect(executor.runJson<{ ok: boolean }>(['gmail', 'messages'])).resolves.toEqual({ ok: true });
+    await expect(executor.runJson<{ ok: boolean }>(['gmail', 'messages'])).resolves.toEqual({
+      ok: true,
+    });
     expect(execFileMock).toHaveBeenCalledWith(
       'gog',
       ['--account', 'me@example.com', 'gmail', 'messages', '--json', '--no-input'],
@@ -62,4 +64,3 @@ describe('GogExecutor', () => {
     await expect(new GogExecutor().runJson(['gmail'])).rejects.toThrow('malformed JSON');
   });
 });
-

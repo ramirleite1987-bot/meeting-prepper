@@ -4,11 +4,7 @@ import { getDb, queries } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 import { buildAliasTerms } from './client-aliases.js';
 import { GogExecutor } from './gog-executor.service.js';
-import type {
-  ClientRecord,
-  GoogleContextItem,
-  GoogleSyncResult,
-} from './google-context.types.js';
+import type { ClientRecord, GoogleContextItem, GoogleSyncResult } from './google-context.types.js';
 
 interface GogGmailMessage {
   id?: string;
@@ -136,19 +132,21 @@ export class GoogleContextService {
       '--full',
     ]);
 
-    return ensureArray(messages).slice(0, config.googleSyncMaxResults).map((message) => ({
-      clientId: client.id,
-      source: 'gmail',
-      externalId: String(message.id ?? message.threadId ?? randomUUID()),
-      title: String(message.subject ?? 'Gmail message'),
-      content: String(message.body ?? message.text ?? message.snippet ?? ''),
-      occurredAt: parseDate(message.date),
-      metadata: {
-        from: message.from,
-        to: message.to,
-        threadId: message.threadId,
-      },
-    }));
+    return ensureArray(messages)
+      .slice(0, config.googleSyncMaxResults)
+      .map((message) => ({
+        clientId: client.id,
+        source: 'gmail',
+        externalId: String(message.id ?? message.threadId ?? randomUUID()),
+        title: String(message.subject ?? 'Gmail message'),
+        content: String(message.body ?? message.text ?? message.snippet ?? ''),
+        occurredAt: parseDate(message.date),
+        metadata: {
+          from: message.from,
+          to: message.to,
+          threadId: message.threadId,
+        },
+      }));
   }
 
   private async fetchCalendarContext(

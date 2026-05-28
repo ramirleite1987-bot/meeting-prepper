@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { KrispAdapter } from '../adapters/krisp.adapter.js';
 import { GranolaAdapter } from '../adapters/granola.adapter.js';
-import type { ContextEntry, IMeetingAdapter, MeetingNotes, MeetingSummary } from '../adapters/types.js';
+import type {
+  ContextEntry,
+  IMeetingAdapter,
+  MeetingNotes,
+  MeetingSummary,
+} from '../adapters/types.js';
 import { queries } from '../db/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -41,7 +46,10 @@ export class MeetingContextService {
       return [];
     }
 
-    const query = this.buildQuery(options.query, options.source === 'krisp' ? options.tags : undefined);
+    const query = this.buildQuery(
+      options.query,
+      options.source === 'krisp' ? options.tags : undefined,
+    );
     return adapter.searchMeetings(query, { limit: options.limit ?? 10 });
   }
 
@@ -148,4 +156,3 @@ function parseJsonObject(value: string | null): unknown {
     return null;
   }
 }
-

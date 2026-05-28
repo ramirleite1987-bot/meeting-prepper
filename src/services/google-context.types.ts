@@ -40,4 +40,3 @@ export interface GoogleSyncResult {
   clientsChecked: number;
   errors: Array<{ source: string; message: string; clientId?: string }>;
 }
-

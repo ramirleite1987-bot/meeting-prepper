@@ -23,11 +23,9 @@ export class DbExternalContextAdapter implements IContextAdapter {
   ): Promise<ContextEntry[]> {
     const limit = options?.limit ?? 50;
     const rows = options?.since
-      ? queries.getExternalContextByClientNameSince().all(
-          clientName,
-          options.since.toISOString(),
-          limit,
-        )
+      ? queries
+          .getExternalContextByClientNameSince()
+          .all(clientName, options.since.toISOString(), limit)
       : queries.getExternalContextByClientName().all(clientName, limit);
 
     return (rows as ExternalContextRecord[]).map((row) => ({
@@ -44,9 +42,8 @@ export class DbExternalContextAdapter implements IContextAdapter {
 function parseMetadata(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
-
