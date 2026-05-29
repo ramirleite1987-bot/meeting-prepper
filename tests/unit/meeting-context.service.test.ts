@@ -12,7 +12,11 @@ function createTestDb(): Database.Database {
   db.pragma('foreign_keys = ON');
   db.exec(readFileSync(join(__dirname, '..', '..', 'src', 'db', 'schema.sql'), 'utf-8'));
   db.prepare('INSERT INTO clients (id, name) VALUES (?, ?)').run('c1', 'Acme');
-  db.prepare('INSERT INTO meetings (id, client_id, title) VALUES (?, ?, ?)').run('m1', 'c1', 'Prep');
+  db.prepare('INSERT INTO meetings (id, client_id, title) VALUES (?, ?, ?)').run(
+    'm1',
+    'c1',
+    'Prep',
+  );
   return db;
 }
 
@@ -59,7 +63,9 @@ describe('MeetingContextService', () => {
       isAvailable: vi.fn().mockResolvedValue(true),
       disconnect: vi.fn().mockResolvedValue(undefined),
       searchMeetings: vi.fn().mockResolvedValue([]),
-      getActionItems: vi.fn().mockResolvedValue([{ title: 'Do not import', status: 'pending', source: 'krisp' }]),
+      getActionItems: vi
+        .fn()
+        .mockResolvedValue([{ title: 'Do not import', status: 'pending', source: 'krisp' }]),
       getMeetingNotes: vi.fn().mockResolvedValue({
         meetingId: 'source-1',
         title: 'Prior call',
@@ -73,9 +79,15 @@ describe('MeetingContextService', () => {
     };
     const service = new MeetingContextService({ krisp: adapter });
 
-    await expect(service.attachSelections('m1', [{ source: 'krisp', externalId: 'source-1' }])).resolves.toBe(1);
-    expect(testDb.prepare('SELECT COUNT(*) AS count FROM meeting_sources').get()).toMatchObject({ count: 1 });
-    expect(testDb.prepare('SELECT COUNT(*) AS count FROM action_items').get()).toMatchObject({ count: 0 });
+    await expect(
+      service.attachSelections('m1', [{ source: 'krisp', externalId: 'source-1' }]),
+    ).resolves.toBe(1);
+    expect(testDb.prepare('SELECT COUNT(*) AS count FROM meeting_sources').get()).toMatchObject({
+      count: 1,
+    });
+    expect(testDb.prepare('SELECT COUNT(*) AS count FROM action_items').get()).toMatchObject({
+      count: 0,
+    });
   });
 
   it('passes Krisp tags through candidate search query', async () => {

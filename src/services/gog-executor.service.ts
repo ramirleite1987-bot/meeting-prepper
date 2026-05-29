@@ -32,7 +32,9 @@ export class GogExecutor {
     try {
       return JSON.parse(stdout) as T;
     } catch (error) {
-      throw new Error(`gog returned malformed JSON: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `gog returned malformed JSON: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -82,4 +84,3 @@ export class GogExecutor {
     return new Error(diagnostics || err.message || 'gog command failed');
   }
 }
-

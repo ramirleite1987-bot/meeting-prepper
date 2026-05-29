@@ -21,11 +21,7 @@ function initializeSchema(database: Database.Database): void {
   migrateExistingSchema(database);
 }
 
-function columnExists(
-  database: Database.Database,
-  tableName: string,
-  columnName: string,
-): boolean {
+function columnExists(database: Database.Database, tableName: string, columnName: string): boolean {
   const rows = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   return rows.some((row) => row.name === columnName);
 }
@@ -116,7 +112,7 @@ export const queries: Record<string, () => Statement> = {
     ),
   getMeetingsWithClient: () =>
     getDb().prepare(
-      "SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC",
+      'SELECT m.*, c.name AS client_name FROM meetings m JOIN clients c ON m.client_id = c.id WHERE m.status = ? ORDER BY m.scheduled_at ASC',
     ),
   getMeetingWithClient: () =>
     getDb().prepare(
@@ -163,9 +159,13 @@ export const queries: Record<string, () => Statement> = {
          updated_at = CURRENT_TIMESTAMP`,
     ),
   getExternalContextByClient: () =>
-    getDb().prepare('SELECT * FROM external_context WHERE client_id = ? ORDER BY occurred_at DESC LIMIT ?'),
+    getDb().prepare(
+      'SELECT * FROM external_context WHERE client_id = ? ORDER BY occurred_at DESC LIMIT ?',
+    ),
   getExternalContextByClientSince: () =>
-    getDb().prepare('SELECT * FROM external_context WHERE client_id = ? AND occurred_at >= ? ORDER BY occurred_at DESC LIMIT ?'),
+    getDb().prepare(
+      'SELECT * FROM external_context WHERE client_id = ? AND occurred_at >= ? ORDER BY occurred_at DESC LIMIT ?',
+    ),
   getExternalContextByClientName: () =>
     getDb().prepare(
       `SELECT ec.* FROM external_context ec

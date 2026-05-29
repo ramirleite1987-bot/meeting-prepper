@@ -7,7 +7,14 @@ export function normalizeAliasList(values: unknown): string[] {
     return [];
   }
 
-  return [...new Set(values.map(String).map((value) => value.trim().toLowerCase()).filter(Boolean))];
+  return [
+    ...new Set(
+      values
+        .map(String)
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export function normalizeClientKind(kind: unknown): ClientKind {
@@ -44,7 +51,9 @@ export function buildAliasTerms(client: ClientRecord): string[] {
     ...aliases.domains,
     ...aliases.emails,
     ...aliases.keywords,
-  ].map((term) => term.trim()).filter(Boolean);
+  ]
+    .map((term) => term.trim())
+    .filter(Boolean);
 }
 
 function safeJson(value: string): unknown {
@@ -54,4 +63,3 @@ function safeJson(value: string): unknown {
     return null;
   }
 }
-
