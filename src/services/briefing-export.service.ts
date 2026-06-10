@@ -16,11 +16,13 @@ const STRING_SECTIONS: Array<{ key: string; heading: string }> = [
 const LIST_SECTIONS: Array<{ key: string; heading: string }> = [
   { key: 'keyTopics', heading: 'Key Topics' },
   { key: 'talkingPoints', heading: 'Talking Points' },
+  { key: 'openThreads', heading: 'Open Threads' },
   { key: 'actionItems', heading: 'Action Items' },
   { key: 'risks', heading: 'Risks & Concerns' },
 ];
 
 const NESTED_SECTION_LABELS: Record<string, string> = {
+  unfulfilledCommitments: 'Unfulfilled Commitments',
   lastDeliveries: 'Last Deliveries',
   openItemsAndRisks: 'Open Items & Risks',
   recentAgreements: 'Recent Agreements',

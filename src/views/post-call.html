@@ -30,6 +30,21 @@
     <h2 class="text-lg font-semibold text-gray-800 mb-3">Consolidated Summary</h2>
     <p class="text-gray-700 leading-relaxed">{{postCallSummary}}</p>
   </section>
+
+  <!-- Follow-up Email -->
+  <section class="bg-white shadow rounded-lg p-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-sm font-semibold text-gray-700">Follow-up Email</h2>
+        <p class="text-sm text-gray-500">Draft a recap email and save it to Gmail drafts for review.</p>
+      </div>
+      <button
+        onclick="draftFollowUpEmail('{{meeting.id}}')"
+        class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition"
+      >Draft Follow-up Email</button>
+    </div>
+    <pre id="follow-up-email-preview" class="hidden mt-4 whitespace-pre-wrap text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-4"></pre>
+  </section>
   {{/if}}
 
   {{#if actionItems}}

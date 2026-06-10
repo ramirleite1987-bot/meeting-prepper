@@ -360,10 +360,31 @@ router.get('/briefing/:id', (req: Request, res: Response, next: NextFunction) =>
       try {
         briefing = JSON.parse(meeting.briefing as string);
         hasNoBriefing = false;
+        // LLM-synthesized narrative sections (present when Claude API is configured)
+        if (
+          briefing &&
+          typeof briefing.executiveSummary === 'string' &&
+          briefing.executiveSummary
+        ) {
+          briefingHtml += `<section class="bg-white shadow rounded-lg p-6"><h2 class="text-lg font-semibold text-gray-800 mb-3">Executive Summary</h2><p class="text-gray-700 leading-relaxed">${escapeHtml(briefing.executiveSummary)}</p></section>`;
+        }
+        for (const { key, title } of [
+          { key: 'talkingPoints', title: 'Talking Points' },
+          { key: 'openThreads', title: 'Open Threads' },
+        ]) {
+          const items = briefing?.[key];
+          if (Array.isArray(items) && items.length > 0) {
+            const itemsHtml = items
+              .map((i: unknown) => `<li>${escapeHtml(String(i))}</li>`)
+              .join('');
+            briefingHtml += `<section class="bg-white shadow rounded-lg p-6"><h2 class="text-lg font-semibold text-gray-800 mb-3">${escapeHtml(title)}</h2><ul class="list-disc list-inside space-y-1 text-gray-700">${itemsHtml}</ul></section>`;
+          }
+        }
         // Flatten sections into a simple array for template rendering
         if (briefing && briefing.sections) {
           const s = briefing.sections;
           const sectionOrder: Array<{ key: string; title: string }> = [
+            { key: 'unfulfilledCommitments', title: 'Unfulfilled Commitments' },
             { key: 'lastDeliveries', title: 'Last Deliveries' },
             { key: 'openItemsAndRisks', title: 'Open Items & Risks' },
             { key: 'recentAgreements', title: 'Recent Agreements' },
@@ -425,7 +446,9 @@ router.post('/briefing/:id/prepare', async (req: Request, res: Response, next: N
       ...(await clientContextService.getClientContext(clientName)),
       ...meetingContextService.getAttachedContextEntries(param(req, 'id')),
     ];
-    await briefingService.generateBriefing(param(req, 'id'), clientName, context);
+    await briefingService.generateBriefing(param(req, 'id'), clientName, context, {
+      clientId: meeting.client_id as string,
+    });
 
     logger.info('Briefing generated via web', { meetingId: param(req, 'id') });
     res.redirect(`/briefing/${param(req, 'id')}`);

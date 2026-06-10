@@ -5,9 +5,16 @@ import { config } from './config.js';
 import { getDb, closeDb } from './db/index.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { traceId } from './middleware/trace-id.js';
-import { apiRouter } from './routes/api.js';
+import {
+  apiRouter,
+  briefingService,
+  clientContextService,
+  meetingContextService,
+  syncService,
+} from './routes/api.js';
 import { viewRouter } from './routes/views.js';
 import webhookRouter from './routes/webhooks.js';
+import { SchedulerService } from './services/scheduler.service.js';
 import { logger } from './utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -74,6 +81,20 @@ app.use('/', viewRouter);
 // Error handler (must be last)
 app.use(errorHandler);
 
+// Background scheduler: pre-meeting briefing delivery + Linear reconciliation
+const scheduler = new SchedulerService({
+  generateBriefing: async (meeting) => {
+    const context = [
+      ...(await clientContextService.getClientContext(meeting.clientName)),
+      ...meetingContextService.getAttachedContextEntries(meeting.id),
+    ];
+    await briefingService.generateBriefing(meeting.id, meeting.clientName, context, {
+      clientId: meeting.clientId,
+    });
+  },
+  reconcileLinear: config.linearApiKey ? () => syncService.reconcileFromLinear() : undefined,
+});
+
 // Initialize database and start server
 function start(): void {
   getDb();
@@ -82,8 +103,13 @@ function start(): void {
     logger.info('Server started', { port: config.port, env: config.nodeEnv });
   });
 
+  if (config.schedulerEnabled && config.nodeEnv !== 'test') {
+    scheduler.start();
+  }
+
   const shutdown = (): void => {
     logger.info('Shutting down...');
+    scheduler.stop();
     server.close(() => {
       closeDb();
       process.exit(0);

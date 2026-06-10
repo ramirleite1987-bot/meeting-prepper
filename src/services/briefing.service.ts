@@ -7,6 +7,8 @@
 import type { ContextEntry } from '../adapters/types.js';
 import { getDb } from '../db/index.js';
 import { logger } from '../utils/logger.js';
+import { CommitmentsService, type OutstandingCommitment } from './commitments.service.js';
+import { LlmSynthesisService } from './llm-synthesis.service.js';
 
 // ──────────────────────────────────────────────
 // Types
@@ -21,7 +23,12 @@ export interface Briefing {
   clientName: string;
   meetingId: string;
   generatedAt: Date;
+  /** LLM-synthesized narrative — present only when the Claude API is configured. */
+  executiveSummary?: string;
+  talkingPoints?: string[];
+  openThreads?: string[];
   sections: {
+    unfulfilledCommitments?: BriefingSection;
     lastDeliveries: BriefingSection;
     openItemsAndRisks: BriefingSection;
     recentAgreements: BriefingSection;
@@ -30,12 +37,24 @@ export interface Briefing {
   };
 }
 
+export interface GenerateBriefingOptions {
+  /** Enables the unfulfilled-commitments section (needs the client's other meetings). */
+  clientId?: string;
+}
+
 // ──────────────────────────────────────────────
 // Service
 // ──────────────────────────────────────────────
 
 export class BriefingService {
   private readonly log = logger.child('BriefingService');
+  private readonly commitments: CommitmentsService;
+  private readonly synthesis: LlmSynthesisService;
+
+  constructor(deps: { commitments?: CommitmentsService; synthesis?: LlmSynthesisService } = {}) {
+    this.commitments = deps.commitments ?? new CommitmentsService();
+    this.synthesis = deps.synthesis ?? new LlmSynthesisService();
+  }
 
   /**
    * Generate a structured briefing from aggregated context entries.
@@ -45,8 +64,11 @@ export class BriefingService {
     meetingId: string,
     clientName: string,
     context: ContextEntry[],
+    options: GenerateBriefingOptions = {},
   ): Promise<Briefing> {
     this.log.info('Generating briefing', { meetingId, clientName, contextSize: context.length });
+
+    const outstandingCommitments = this.loadOutstandingCommitments(meetingId, options.clientId);
 
     const briefing: Briefing = {
       clientName,
@@ -61,10 +83,63 @@ export class BriefingService {
       },
     };
 
+    if (outstandingCommitments.length > 0) {
+      briefing.sections.unfulfilledCommitments = {
+        title: 'Unfulfilled Commitments',
+        items: this.commitments.formatAsBriefingItems(outstandingCommitments),
+      };
+    }
+
+    await this.applySynthesis(briefing, clientName, context, outstandingCommitments);
+
     this.storeBriefing(meetingId, briefing);
 
     this.log.info('Briefing generated successfully', { meetingId });
     return briefing;
+  }
+
+  /**
+   * Open commitments from the client's previous meetings. Failures degrade
+   * to an empty list — the briefing must still generate without them.
+   */
+  private loadOutstandingCommitments(
+    meetingId: string,
+    clientId?: string,
+  ): OutstandingCommitment[] {
+    if (!clientId) return [];
+    try {
+      return this.commitments.getOutstandingCommitments(clientId, meetingId);
+    } catch (error) {
+      this.log.warn('Failed to load outstanding commitments', {
+        clientId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Enrich the briefing with LLM-synthesized narrative sections.
+   * No-op when the Claude API is not configured or the call fails.
+   */
+  private async applySynthesis(
+    briefing: Briefing,
+    clientName: string,
+    context: ContextEntry[],
+    outstandingCommitments: OutstandingCommitment[],
+  ): Promise<void> {
+    if (!this.synthesis.isAvailable() || context.length === 0) return;
+
+    const synthesis = await this.synthesis.synthesizeBriefing({
+      clientName,
+      context,
+      outstandingCommitments,
+    });
+    if (!synthesis) return;
+
+    briefing.executiveSummary = synthesis.executiveSummary;
+    briefing.talkingPoints = synthesis.talkingPoints;
+    briefing.openThreads = synthesis.openThreads;
   }
 
   /**

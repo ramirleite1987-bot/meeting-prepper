@@ -36,6 +36,14 @@ function migrateExistingSchema(database: Database.Database): void {
       'ALTER TABLE clients ADD COLUMN aliases TEXT NOT NULL DEFAULT \'{"domains":[],"emails":[],"keywords":[]}\'',
     );
   }
+
+  if (!columnExists(database, 'action_items', 'owner_side')) {
+    database.exec("ALTER TABLE action_items ADD COLUMN owner_side TEXT NOT NULL DEFAULT 'unknown'");
+  }
+
+  if (!columnExists(database, 'meetings', 'briefing_delivered_at')) {
+    database.exec('ALTER TABLE meetings ADD COLUMN briefing_delivered_at DATETIME');
+  }
 }
 export function getDb(): Database.Database {
   if (db) {
@@ -130,6 +138,21 @@ export const queries: Record<string, () => Statement> = {
     getDb().prepare(
       "UPDATE meetings SET post_call_notes = @postCallNotes, status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = @id",
     ),
+  getMeetingsDueForBriefing: () =>
+    getDb().prepare(
+      `SELECT m.*, c.name AS client_name FROM meetings m
+       JOIN clients c ON m.client_id = c.id
+       WHERE m.status = 'scheduled'
+         AND m.briefing_delivered_at IS NULL
+         AND m.scheduled_at IS NOT NULL
+         AND m.scheduled_at >= @from
+         AND m.scheduled_at <= @to
+       ORDER BY m.scheduled_at ASC`,
+    ),
+  markBriefingDelivered: () =>
+    getDb().prepare(
+      'UPDATE meetings SET briefing_delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ),
 
   // Meeting Sources
   insertMeetingSource: () =>
@@ -186,11 +209,22 @@ export const queries: Record<string, () => Statement> = {
   // Action Items
   insertActionItem: () =>
     getDb().prepare(
-      'INSERT INTO action_items (id, meeting_id, source, title, description, owner, deadline, priority, context_hash) VALUES (@id, @meetingId, @source, @title, @description, @owner, @deadline, @priority, @contextHash)',
+      'INSERT INTO action_items (id, meeting_id, source, title, description, owner, owner_side, deadline, priority, context_hash) VALUES (@id, @meetingId, @source, @title, @description, @owner, @ownerSide, @deadline, @priority, @contextHash)',
     ),
   getActionItemsByMeeting: () =>
     getDb().prepare('SELECT * FROM action_items WHERE meeting_id = ? ORDER BY created_at ASC'),
+  getActionItemById: () => getDb().prepare('SELECT * FROM action_items WHERE id = ?'),
   getActionItemByHash: () => getDb().prepare('SELECT * FROM action_items WHERE context_hash = ?'),
+  getOutstandingCommitmentsByClient: () =>
+    getDb().prepare(
+      `SELECT ai.*, m.title AS meeting_title, m.scheduled_at AS meeting_scheduled_at
+       FROM action_items ai
+       JOIN meetings m ON ai.meeting_id = m.id
+       WHERE m.client_id = @clientId
+         AND ai.meeting_id != @excludeMeetingId
+         AND ai.status NOT IN ('completed', 'cancelled')
+       ORDER BY ai.created_at ASC`,
+    ),
   updateActionItemStatus: () =>
     getDb().prepare(
       'UPDATE action_items SET status = @status, updated_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -204,6 +238,7 @@ export const queries: Record<string, () => Statement> = {
   getLinearSyncByIssue: () =>
     getDb().prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
   getLinearSyncByMeeting: () => getDb().prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+  getAllLinearSync: () => getDb().prepare('SELECT * FROM linear_sync ORDER BY last_synced_at ASC'),
   updateLinearSyncStatus: () =>
     getDb().prepare(
       'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',

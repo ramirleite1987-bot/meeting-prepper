@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS meetings (
   scheduled_at DATETIME,
   status TEXT DEFAULT 'scheduled', -- scheduled, in_progress, completed
   briefing TEXT, -- JSON
+  briefing_delivered_at DATETIME, -- set when the scheduler auto-delivered the briefing
   post_call_notes TEXT, -- JSON
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS action_items (
   title TEXT NOT NULL,
   description TEXT,
   owner TEXT,
+  owner_side TEXT NOT NULL DEFAULT 'unknown', -- ours, theirs, unknown
   deadline DATETIME,
   priority TEXT DEFAULT 'medium',
   context_hash TEXT, -- SHA-256 for idempotent matching
