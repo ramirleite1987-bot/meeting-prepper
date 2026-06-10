@@ -9,6 +9,7 @@ import { KrispAdapter } from '../adapters/krisp.adapter.js';
 import { GranolaAdapter } from '../adapters/granola.adapter.js';
 import type { IMeetingAdapter, MeetingNotes, ActionItem } from '../adapters/types.js';
 import { getDb, queries } from '../db/index.js';
+import { classifyOwnerSide } from './commitments.service.js';
 import { logger } from '../utils/logger.js';
 
 // ──────────────────────────────────────────────
@@ -347,6 +348,7 @@ export class ExtractionService {
           title: item.title,
           description: item.description ?? null,
           owner: item.assignee ?? null,
+          ownerSide: classifyOwnerSide(item.assignee),
           deadline: item.dueDate?.toISOString() ?? null,
           priority: item.priority ?? 'none',
           contextHash,

@@ -457,6 +457,40 @@
   };
 
   // ──────────────────────────────────────────────
+  // Follow-up email draft
+  // ──────────────────────────────────────────────
+
+  window.draftFollowUpEmail = function (meetingId) {
+    if (!meetingId) return;
+
+    fetch('/api/meetings/' + encodeURIComponent(meetingId) + '/follow-up-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(function (res) {
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Failed to draft follow-up email'); });
+        return res.json();
+      })
+      .then(function (result) {
+        if (result.draftStatus === 'created') {
+          showToast('Gmail draft created (' + result.to.join(', ') + ')', 'success');
+        } else if (result.draftStatus === 'no_recipients') {
+          showToast('Draft ready — add client alias emails to create a Gmail draft', 'success');
+        } else {
+          showToast('Gmail draft failed — body shown below', 'error');
+        }
+        var preview = document.getElementById('follow-up-email-preview');
+        if (preview) {
+          preview.textContent = 'Subject: ' + result.subject + '\n\n' + result.body;
+          preview.classList.remove('hidden');
+        }
+      })
+      .catch(function (err) {
+        showToast(err.message, 'error');
+      });
+  };
+
+  // ──────────────────────────────────────────────
   // Linear sync actions
   // ──────────────────────────────────────────────
 

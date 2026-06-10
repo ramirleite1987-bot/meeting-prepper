@@ -20,6 +20,8 @@ import {
 } from '../services/action-items.service.js';
 import { buildAgenda } from '../services/agenda.service.js';
 import { formatBriefingAsMarkdown } from '../services/briefing-export.service.js';
+import { CommitmentsService } from '../services/commitments.service.js';
+import { FollowUpEmailService } from '../services/follow-up-email.service.js';
 import { buildStats } from '../services/stats.service.js';
 import { DbExternalContextAdapter } from '../adapters/db-external-context.adapter.js';
 import { normalizeClientKind, serializeClientAliases } from '../services/client-aliases.js';
@@ -39,6 +41,8 @@ const syncService = new SyncService();
 const googleContextService = new GoogleContextService();
 const linearContextService = new LinearContextService();
 const meetingContextService = new MeetingContextService();
+const commitmentsService = new CommitmentsService();
+const followUpEmailService = new FollowUpEmailService();
 
 function param(req: Request, name: string): string {
   const val = req.params[name];
@@ -121,6 +125,18 @@ router.get(
     }
     const history = queries.getClientHistory().all(param(req, 'id'));
     res.json(history);
+  }),
+);
+
+router.get(
+  '/clients/:id/commitments',
+  asyncHandler((req, res) => {
+    const client = queries.getClientById().get(param(req, 'id'));
+    if (!client) {
+      throw createError('Client not found', 404);
+    }
+    const commitments = commitmentsService.getOutstandingCommitments(param(req, 'id'), '');
+    res.json({ total: commitments.length, commitments });
   }),
 );
 
@@ -239,7 +255,9 @@ router.post(
       ...(await clientContextService.getClientContext(clientName)),
       ...meetingContextService.getAttachedContextEntries(param(req, 'id')),
     ];
-    const briefing = await briefingService.generateBriefing(param(req, 'id'), clientName, context);
+    const briefing = await briefingService.generateBriefing(param(req, 'id'), clientName, context, {
+      clientId: client.id as string,
+    });
 
     logger.info('Briefing generated', { meetingId: param(req, 'id'), traceId: req.traceId });
     await notificationService.notify(
@@ -534,6 +552,50 @@ router.post(
       synced: result.results.length,
       traceId: req.traceId,
     });
+    res.json(result);
+  }),
+);
+
+router.post(
+  '/linear/reconcile',
+  asyncHandler(async (req, res) => {
+    const { meetingId } = req.body as { meetingId?: string };
+    const result = await syncService.reconcileFromLinear(meetingId);
+    logger.info('Linear reconciliation triggered via API', {
+      meetingId: meetingId ?? 'all',
+      traceId: req.traceId,
+    });
+    res.json(result);
+  }),
+);
+
+// ──────────────────────────────────────────────
+// Follow-up Email
+// ──────────────────────────────────────────────
+
+router.post(
+  '/meetings/:id/follow-up-email',
+  asyncHandler(async (req, res) => {
+    const meeting = queries.getMeetingById().get(param(req, 'id'));
+    if (!meeting) {
+      throw createError('Meeting not found', 404);
+    }
+
+    const result = await followUpEmailService.draftForMeeting(param(req, 'id'));
+
+    logger.info('Follow-up email drafted', {
+      meetingId: param(req, 'id'),
+      draftStatus: result.draftStatus,
+      traceId: req.traceId,
+    });
+    await notificationService.notify(
+      'follow_up_email_drafted',
+      `Follow-up email drafted for ${result.clientName}`,
+      result.draftStatus === 'created'
+        ? `Gmail draft created (${result.to.join(', ')})`
+        : `Draft body ready (${result.draftStatus})`,
+      { meetingId: param(req, 'id'), draftStatus: result.draftStatus, draftId: result.draftId },
+    );
     res.json(result);
   }),
 );

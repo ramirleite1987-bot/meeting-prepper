@@ -158,4 +158,105 @@ describe('BriefingService', () => {
       expect(questions.some((q) => q.includes('key outcomes'))).toBe(true);
     });
   });
+
+  describe('commitments and synthesis enrichment', () => {
+    const commitment = {
+      id: 'a1',
+      title: 'Send proposal',
+      owner: 'Ramir',
+      ownerSide: 'ours' as const,
+      status: 'pending',
+      deadline: null,
+      meetingId: 'm0',
+      meetingTitle: 'Kickoff',
+      meetingScheduledAt: null,
+    };
+
+    function makeDeps(overrides: {
+      commitments?: unknown[];
+      synthesis?: Record<string, unknown> | null;
+      available?: boolean;
+    }) {
+      return {
+        commitments: {
+          getOutstandingCommitments: vi.fn().mockReturnValue(overrides.commitments ?? []),
+          formatAsBriefingItems: vi
+            .fn()
+            .mockImplementation((items: Array<{ title: string }>) =>
+              items.map((c) => `We promised: ${c.title}`),
+            ),
+        },
+        synthesis: {
+          isAvailable: () => overrides.available ?? false,
+          synthesizeBriefing: vi.fn().mockResolvedValue(overrides.synthesis ?? null),
+        },
+      };
+    }
+
+    it('adds an unfulfilled commitments section when clientId is provided', async () => {
+      const deps = makeDeps({ commitments: [commitment] });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svc = new BriefingService(deps as any);
+
+      const briefing = await svc.generateBriefing('m1', 'Client', [makeEntry()], {
+        clientId: 'c1',
+      });
+
+      expect(deps.commitments.getOutstandingCommitments).toHaveBeenCalledWith('c1', 'm1');
+      expect(briefing.sections.unfulfilledCommitments?.items).toEqual([
+        'We promised: Send proposal',
+      ]);
+    });
+
+    it('omits the commitments section without clientId', async () => {
+      const deps = makeDeps({ commitments: [commitment] });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svc = new BriefingService(deps as any);
+
+      const briefing = await svc.generateBriefing('m1', 'Client', [makeEntry()]);
+
+      expect(deps.commitments.getOutstandingCommitments).not.toHaveBeenCalled();
+      expect(briefing.sections.unfulfilledCommitments).toBeUndefined();
+    });
+
+    it('applies LLM synthesis when available', async () => {
+      const deps = makeDeps({
+        available: true,
+        synthesis: {
+          executiveSummary: 'All good.',
+          talkingPoints: ['Point 1'],
+          openThreads: ['Thread 1'],
+        },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svc = new BriefingService(deps as any);
+
+      const briefing = await svc.generateBriefing('m1', 'Client', [makeEntry()]);
+
+      expect(briefing.executiveSummary).toBe('All good.');
+      expect(briefing.talkingPoints).toEqual(['Point 1']);
+      expect(briefing.openThreads).toEqual(['Thread 1']);
+    });
+
+    it('leaves the briefing heuristic-only when synthesis returns null', async () => {
+      const deps = makeDeps({ available: true, synthesis: null });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svc = new BriefingService(deps as any);
+
+      const briefing = await svc.generateBriefing('m1', 'Client', [makeEntry()]);
+
+      expect(briefing.executiveSummary).toBeUndefined();
+      expect(briefing.sections.recommendedQuestions.items.length).toBeGreaterThan(0);
+    });
+
+    it('skips synthesis entirely when the LLM is unavailable', async () => {
+      const deps = makeDeps({ available: false });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svc = new BriefingService(deps as any);
+
+      await svc.generateBriefing('m1', 'Client', [makeEntry()]);
+
+      expect(deps.synthesis.synthesizeBriefing).not.toHaveBeenCalled();
+    });
+  });
 });

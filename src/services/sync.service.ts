@@ -34,6 +34,12 @@ export interface WebhookUpdate {
   updatedAt: string;
 }
 
+export interface ReconcileResult {
+  checked: number;
+  updated: number;
+  errors: Array<{ linearIssueId: string; error: string }>;
+}
+
 export interface LinearSyncOptions {
   projectId?: string;
 }
@@ -260,6 +266,95 @@ export class SyncService {
         }),
       });
     }
+  }
+
+  /**
+   * Pull current issue status from Linear for synced action items and update
+   * local state on change. This is the polling counterpart to the webhook
+   * path (`handleLinearUpdate`) — it catches updates the webhook never
+   * delivered (missed events, issues closed while the app was down).
+   */
+  async reconcileFromLinear(meetingId?: string): Promise<ReconcileResult> {
+    await this.ensureInitialized();
+
+    const rows = (
+      meetingId ? queries.getLinearSyncByMeeting().all(meetingId) : queries.getAllLinearSync().all()
+    ) as Array<Record<string, unknown>>;
+
+    const result: ReconcileResult = { checked: 0, updated: 0, errors: [] };
+
+    for (const row of rows) {
+      const linearIssueId = row.linear_issue_id as string;
+      result.checked++;
+
+      try {
+        const status = await this.linearAdapter.getTaskStatus(linearIssueId);
+        const changed = this.applyReconciledStatus(row, status);
+        if (changed) result.updated++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        result.errors.push({ linearIssueId, error: message });
+        logger.warn('Linear reconciliation failed for issue', { linearIssueId, error: message });
+      }
+    }
+
+    logger.info('Linear reconciliation completed', {
+      meetingId: meetingId ?? 'all',
+      ...result,
+      errors: result.errors.length,
+    });
+
+    return result;
+  }
+
+  /**
+   * Update the local action item if Linear's status diverges.
+   * Returns true when a change was applied.
+   */
+  private applyReconciledStatus(syncRow: Record<string, unknown>, status: TaskStatus): boolean {
+    const actionItemId = syncRow.action_item_id as string | null;
+    const newStatus = this.mapTaskStatusToActionItem(status);
+
+    queries.updateLinearSyncStatus().run({
+      id: syncRow.id as string,
+      syncStatus: 'synced',
+    });
+
+    if (!actionItemId) return false;
+
+    const actionItem = queries.getActionItemById().get(actionItemId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!actionItem || actionItem.status === newStatus) return false;
+
+    queries.updateActionItemStatus().run({ id: actionItemId, status: newStatus });
+
+    const meetingId = syncRow.meeting_id as string;
+    const meeting = queries.getMeetingById().get(meetingId) as Record<string, unknown> | undefined;
+    if (meeting) {
+      queries.insertClientHistory().run({
+        id: randomUUID(),
+        clientId: meeting.client_id as string,
+        meetingId,
+        eventType: 'linear_status_change',
+        eventData: JSON.stringify({
+          linearIssueId: syncRow.linear_issue_id,
+          actionItemId,
+          previousStatus: actionItem.status,
+          newStatus: status,
+          via: 'reconciliation',
+        }),
+      });
+    }
+
+    logger.info('Action item status reconciled from Linear', {
+      actionItemId,
+      linearIssueId: syncRow.linear_issue_id,
+      previousStatus: actionItem.status,
+      newStatus,
+    });
+
+    return true;
   }
 
   // ──────────────────────────────────────────────

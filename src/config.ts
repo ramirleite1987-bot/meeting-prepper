@@ -27,6 +27,21 @@ const configSchema = z.object({
   linearTeamId: z.string().optional(),
   linearWebhookSecret: z.string().optional(),
 
+  anthropicApiKey: z.string().optional(),
+  anthropicModel: z.string().default('claude-opus-4-8'),
+
+  // Comma-separated names/emails that identify "our side" when classifying
+  // action-item ownership (e.g. "Ramir,ramirleite1987@gmail.com").
+  selfIdentifiers: z.string().default(''),
+
+  schedulerEnabled: z
+    .string()
+    .optional()
+    .transform((v) => v !== 'false' && v !== '0'),
+  schedulerIntervalMinutes: z.coerce.number().int().positive().default(5),
+  briefingLeadMinutes: z.coerce.number().int().positive().default(60),
+  linearReconcileIntervalMinutes: z.coerce.number().int().positive().default(30),
+
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
@@ -49,6 +64,13 @@ function loadConfig(): Config {
     linearApiKey: process.env.LINEAR_API_KEY || undefined,
     linearTeamId: process.env.LINEAR_TEAM_ID || undefined,
     linearWebhookSecret: process.env.LINEAR_WEBHOOK_SECRET || undefined,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || undefined,
+    anthropicModel: process.env.ANTHROPIC_MODEL,
+    selfIdentifiers: process.env.SELF_IDENTIFIERS,
+    schedulerEnabled: process.env.SCHEDULER_ENABLED,
+    schedulerIntervalMinutes: process.env.SCHEDULER_INTERVAL_MINUTES,
+    briefingLeadMinutes: process.env.BRIEFING_LEAD_MINUTES,
+    linearReconcileIntervalMinutes: process.env.LINEAR_RECONCILE_INTERVAL_MINUTES,
     logLevel: process.env.LOG_LEVEL,
   };
 

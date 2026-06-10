@@ -57,6 +57,8 @@ vi.mock('../../src/db/index.js', () => {
     getLinearSyncByIssue: () =>
       testDb.prepare('SELECT * FROM linear_sync WHERE linear_issue_id = ?'),
     getLinearSyncByMeeting: () => testDb.prepare('SELECT * FROM linear_sync WHERE meeting_id = ?'),
+    getAllLinearSync: () => testDb.prepare('SELECT * FROM linear_sync ORDER BY last_synced_at ASC'),
+    getActionItemById: () => testDb.prepare('SELECT * FROM action_items WHERE id = ?'),
     updateLinearSyncStatus: () =>
       testDb.prepare(
         'UPDATE linear_sync SET sync_status = @syncStatus, last_synced_at = CURRENT_TIMESTAMP WHERE id = @id',
@@ -117,6 +119,7 @@ vi.mock('../../src/config.js', () => ({
 }));
 
 // Mock Linear adapter to avoid real API calls
+const mockGetTaskStatus = vi.fn().mockResolvedValue('todo');
 const mockCreateTask = vi
   .fn()
   .mockImplementation((task: { title: string; meetingId?: string }) => ({
@@ -134,6 +137,7 @@ vi.mock('../../src/adapters/linear.adapter.js', () => ({
   LinearAdapter: vi.fn().mockImplementation(() => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     createTask: mockCreateTask,
+    getTaskStatus: mockGetTaskStatus,
     updateTask: vi.fn().mockImplementation((id: string) => ({
       id,
       externalId: 'LIN-123',
@@ -200,6 +204,7 @@ describe('Sync Flow Integration Tests', () => {
     testDb = createTestDb();
     syncService = new SyncService();
     mockCreateTask.mockClear();
+    mockGetTaskStatus.mockReset().mockResolvedValue('todo');
     mockFindExisting.mockReset().mockResolvedValue(null);
     mockStoreCrossReference.mockReset();
   });
@@ -415,6 +420,101 @@ describe('Sync Flow Integration Tests', () => {
         .get('sync-1') as Record<string, unknown>;
 
       expect(syncRecord.sync_status).toBe('synced');
+    });
+  });
+
+  describe('Linear → Action Item Reconciliation (polling)', () => {
+    function seedSync(syncId: string, actionItemId: string, issueId: string): void {
+      testDb
+        .prepare(
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(syncId, actionItemId, 'm1', issueId, 'linear', 'created');
+    }
+
+    it('marks local action items completed when Linear issue is done', async () => {
+      seedBasicData();
+      seedActionItem('ai-1', 'm1', 'Closed in Linear', 'hash-r1');
+      seedSync('sync-1', 'ai-1', 'linear-r1');
+      mockGetTaskStatus.mockResolvedValue('done');
+
+      const result = await syncService.reconcileFromLinear();
+
+      expect(result.checked).toBe(1);
+      expect(result.updated).toBe(1);
+      expect(result.errors).toHaveLength(0);
+
+      const item = testDb.prepare('SELECT * FROM action_items WHERE id = ?').get('ai-1') as Record<
+        string,
+        unknown
+      >;
+      expect(item.status).toBe('completed');
+
+      const history = testDb
+        .prepare('SELECT * FROM client_history WHERE client_id = ?')
+        .all('c1') as Array<Record<string, unknown>>;
+      expect(history).toHaveLength(1);
+      const eventData = JSON.parse(history[0].event_data as string);
+      expect(eventData.via).toBe('reconciliation');
+      expect(eventData.newStatus).toBe('done');
+    });
+
+    it('does not write history when status is unchanged', async () => {
+      seedBasicData();
+      seedActionItem('ai-1', 'm1', 'Still pending', 'hash-r2');
+      seedSync('sync-1', 'ai-1', 'linear-r2');
+      mockGetTaskStatus.mockResolvedValue('todo'); // maps to pending, same as seeded
+
+      const result = await syncService.reconcileFromLinear();
+
+      expect(result.updated).toBe(0);
+      const history = testDb.prepare('SELECT COUNT(*) as count FROM client_history').get() as {
+        count: number;
+      };
+      expect(history.count).toBe(0);
+    });
+
+    it('scopes reconciliation to a meeting when meetingId is given', async () => {
+      seedBasicData();
+      testDb
+        .prepare(
+          'INSERT INTO meetings (id, client_id, title, scheduled_at, status) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run('m2', 'c1', 'Other Meeting', '2024-01-02', 'scheduled');
+      seedActionItem('ai-1', 'm1', 'In scope', 'hash-r3');
+      seedActionItem('ai-2', 'm2', 'Out of scope', 'hash-r4');
+      seedSync('sync-1', 'ai-1', 'linear-r3');
+      testDb
+        .prepare(
+          'INSERT INTO linear_sync (id, action_item_id, meeting_id, linear_issue_id, source, sync_status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('sync-2', 'ai-2', 'm2', 'linear-r4', 'linear', 'created');
+      mockGetTaskStatus.mockResolvedValue('done');
+
+      const result = await syncService.reconcileFromLinear('m1');
+
+      expect(result.checked).toBe(1);
+      const outOfScope = testDb
+        .prepare('SELECT * FROM action_items WHERE id = ?')
+        .get('ai-2') as Record<string, unknown>;
+      expect(outOfScope.status).toBe('pending');
+    });
+
+    it('collects per-issue errors without aborting the run', async () => {
+      seedBasicData();
+      seedActionItem('ai-1', 'm1', 'Errors', 'hash-r5');
+      seedActionItem('ai-2', 'm1', 'Works', 'hash-r6');
+      seedSync('sync-1', 'ai-1', 'linear-err');
+      seedSync('sync-2', 'ai-2', 'linear-ok');
+      mockGetTaskStatus
+        .mockRejectedValueOnce(new Error('issue not found'))
+        .mockResolvedValueOnce('done');
+
+      const result = await syncService.reconcileFromLinear();
+
+      expect(result.checked).toBe(2);
+      expect(result.updated).toBe(1);
+      expect(result.errors).toEqual([{ linearIssueId: 'linear-err', error: 'issue not found' }]);
     });
   });
 });
