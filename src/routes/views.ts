@@ -17,6 +17,7 @@ import {
 import { buildAgenda } from '../services/agenda.service.js';
 import { buildStats } from '../services/stats.service.js';
 import { logger } from '../utils/logger.js';
+import { render as renderSimpleTemplate, escapeHtml } from '../utils/template-engine.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const viewsDir = join(__dirname, '..', 'views');
@@ -41,116 +42,6 @@ function loadTemplate(name: string): string {
 function renderLayout(title: string, content: string): string {
   const layout = loadTemplate('layout');
   return layout.replace('{{title}}', title).replace('{{content}}', content);
-}
-
-function renderSimpleTemplate(template: string, data: Record<string, unknown>): string {
-  let result = template;
-
-  // Handle {{#each items}} ... {{/each}} first – this expands items & processes inner templates per-item
-  result = result.replace(
-    /\{\{#each\s+([\w.]+)\}\}([\s\S]*?)\{\{\/each\}\}/g,
-    (_match, key: string, block: string) => {
-      const arr = resolveValue(data, key);
-      if (!Array.isArray(arr) || arr.length === 0) return '';
-      return arr
-        .map((item: unknown) => {
-          let rendered = block;
-          if (typeof item === 'object' && item !== null) {
-            const obj = item as Record<string, unknown>;
-            // Process inner {{#if this.prop}} blocks with item context
-            rendered = rendered.replace(
-              /\{\{#if\s+this\.([\w]+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
-              (_m: string, prop: string, innerBlock: string) => {
-                const val = obj[prop];
-                const [ifBlock, elseBlock] = innerBlock.split('{{else}}');
-                return isTruthy(val) ? ifBlock : (elseBlock ?? '');
-              },
-            );
-            // Process inner {{#each this.prop}} blocks with item context
-            rendered = rendered.replace(
-              /\{\{#each\s+this\.([\w]+)\}\}([\s\S]*?)\{\{\/each\}\}/g,
-              (_m: string, prop: string, innerBlock: string) => {
-                const innerArr = obj[prop];
-                if (!Array.isArray(innerArr)) return '';
-                return innerArr
-                  .map((innerItem: unknown) => {
-                    let innerRendered = innerBlock;
-                    if (typeof innerItem === 'object' && innerItem !== null) {
-                      const innerObj = innerItem as Record<string, unknown>;
-                      innerRendered = innerRendered.replace(
-                        /\{\{this\.([\w]+)\}\}/g,
-                        (_m2: string, p: string) => escapeHtml(String(innerObj[p] ?? '')),
-                      );
-                    }
-                    innerRendered = innerRendered.replace(
-                      /\{\{this\}\}/g,
-                      escapeHtml(String(innerItem)),
-                    );
-                    return innerRendered;
-                  })
-                  .join('');
-              },
-            );
-            // Replace {{this.prop}} values
-            rendered = rendered.replace(/\{\{this\.([\w]+)\}\}/g, (_m: string, prop: string) =>
-              escapeHtml(String(obj[prop] ?? '')),
-            );
-          }
-          rendered = rendered.replace(/\{\{this\}\}/g, escapeHtml(String(item)));
-          return rendered;
-        })
-        .join('');
-    },
-  );
-
-  // Handle {{#if value}} ... {{else}} ... {{/if}} (top-level only now, inner ones handled in each)
-  result = result.replace(
-    /\{\{#if\s+([\w.]+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
-    (_match, key: string, block: string) => {
-      const val = resolveValue(data, key);
-      const [ifBlock, elseBlock] = block.split('{{else}}');
-      if (isTruthy(val)) {
-        return ifBlock;
-      }
-      return elseBlock ?? '';
-    },
-  );
-
-  // Handle {{{key}}} raw HTML replacements FIRST (triple braces for unescaped output)
-  result = result.replace(/\{\{\{([\w.]+)\}\}\}/g, (_match, key: string) => {
-    const val = resolveValue(data, key);
-    return val !== null && val !== undefined ? String(val) : '';
-  });
-
-  // Handle {{key}} simple replacements (double braces, escaped)
-  result = result.replace(/\{\{([\w.]+)\}\}/g, (_match, key: string) => {
-    const val = resolveValue(data, key);
-    return val !== null && val !== undefined ? escapeHtml(String(val)) : '';
-  });
-
-  return result;
-}
-
-function resolveValue(data: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce<unknown>((obj, key) => {
-    if (obj && typeof obj === 'object') {
-      return (obj as Record<string, unknown>)[key];
-    }
-    return undefined;
-  }, data);
-}
-
-function isTruthy(val: unknown): boolean {
-  if (Array.isArray(val)) return val.length > 0;
-  return Boolean(val);
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 // ──────────────────────────────────────────────
