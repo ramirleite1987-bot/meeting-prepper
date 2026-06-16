@@ -24,6 +24,7 @@ describe('Config', () => {
     expect(config.nodeEnv).toBe('development');
     expect(config.databasePath).toBe('./data/meeting-prepper.db');
     expect(config.logLevel).toBe('info');
+    expect(config.meetingMcpTimeoutMs).toBe(10000);
   });
 
   it('should use provided env var values', async () => {
@@ -34,6 +35,7 @@ describe('Config', () => {
     process.env.OBSIDIAN_VAULT_PATH = '/vault';
     process.env.LINEAR_API_KEY = 'lin-api-xyz';
     process.env.LINEAR_TEAM_ID = 'team-123';
+    process.env.MEETING_MCP_TIMEOUT_MS = '2500';
 
     const { config } = await import('../../src/config.js');
 
@@ -44,6 +46,7 @@ describe('Config', () => {
     expect(config.obsidianVaultPath).toBe('/vault');
     expect(config.linearApiKey).toBe('lin-api-xyz');
     expect(config.linearTeamId).toBe('team-123');
+    expect(config.meetingMcpTimeoutMs).toBe(2500);
   });
 
   it('should coerce PORT string to number', async () => {

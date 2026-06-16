@@ -1,4 +1,10 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+import {
+  Router,
+  type Request,
+  type Response,
+  type NextFunction,
+  type Router as ExpressRouter,
+} from 'express';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +28,7 @@ import { render as renderSimpleTemplate, escapeHtml } from '../utils/template-en
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const viewsDir = join(__dirname, '..', 'views');
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 function param(req: Request, name: string): string {
   const val = req.params[name];

@@ -3,9 +3,12 @@ import type { Request, Response, NextFunction } from 'express';
 
 const TRACE_HEADER = 'x-trace-id';
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    traceId: string;
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      traceId: string;
+    }
   }
 }
 

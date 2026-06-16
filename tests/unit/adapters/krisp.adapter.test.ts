@@ -84,6 +84,32 @@ describe('KrispAdapter', () => {
       expect(results[0].durationMinutes).toBe(15);
     });
 
+    it('should normalize malformed meeting summaries to the internal contract', async () => {
+      mockCallTool.mockResolvedValueOnce(
+        mcpResponse([
+          {
+            id: 123,
+            title: null,
+            date: 'not-a-date',
+            attendees: 'Alice',
+            duration_minutes: '30',
+          },
+        ]),
+      );
+
+      const [result] = await adapter.searchMeetings('standup');
+
+      expect(result).toMatchObject({
+        meetingId: '',
+        title: 'Untitled Meeting',
+        attendees: [],
+        source: 'krisp',
+        durationMinutes: undefined,
+      });
+      expect(result.date).toBeInstanceOf(Date);
+      expect(Number.isNaN(result.date.getTime())).toBe(false);
+    });
+
     it('should return empty array for empty results', async () => {
       mockCallTool.mockResolvedValueOnce(mcpResponse([]));
       const results = await adapter.searchMeetings('nothing');
@@ -162,6 +188,53 @@ describe('KrispAdapter', () => {
       const notes = await adapter.getMeetingNotes(hexId);
       expect(notes).not.toBeNull();
       expect(notes!.title).toBe('Test');
+    });
+
+    it('should normalize malformed document payloads and action items', async () => {
+      mockCallTool.mockResolvedValueOnce(
+        mcpResponse([{ id: 'm1', document_id: 'abcdef01234567890abcdef012345678' }]),
+      );
+      mockCallTool.mockResolvedValueOnce(
+        mcpResponse({
+          title: 42,
+          date: 'invalid-date',
+          attendees: 'Alice',
+          summary: null,
+          key_points: 'single point',
+          decisions: [1, 'Ship'],
+          risks: 'Timeline',
+        }),
+      );
+      mockCallTool.mockResolvedValueOnce(
+        mcpResponse([
+          {
+            id: 100,
+            title: null,
+            due_date: 'invalid-date',
+            priority: 'unknown',
+            status: 'blocked',
+          },
+        ]),
+      );
+
+      const notes = await adapter.getMeetingNotes('m1');
+
+      expect(notes).not.toBeNull();
+      expect(notes).toMatchObject({
+        title: 'Untitled Meeting',
+        attendees: [],
+        summary: '',
+        keyPoints: ['Decision: 1', 'Decision: Ship'],
+      });
+      expect(notes!.date).toBeInstanceOf(Date);
+      expect(Number.isNaN(notes!.date.getTime())).toBe(false);
+      expect(notes!.actionItems[0]).toMatchObject({
+        id: undefined,
+        title: '',
+        dueDate: undefined,
+        priority: 'none',
+        status: 'pending',
+      });
     });
   });
 
