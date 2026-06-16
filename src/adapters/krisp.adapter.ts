@@ -8,7 +8,15 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMCPClient } from '../utils/mcp-client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { withTimeout } from '../utils/async-timeout.js';
 import type { IMeetingAdapter, MeetingNotes, MeetingSummary, ActionItem } from './types.js';
+import {
+  mergeKrispKeyPoints,
+  normalizeActionItems,
+  normalizeMeetingNotes,
+  normalizeMeetingSummary,
+  normalizeTextArray,
+} from './meeting-normalizer.js';
 
 const log = logger.child('KrispAdapter');
 
@@ -16,36 +24,36 @@ const log = logger.child('KrispAdapter');
 const DOCUMENT_ID_REGEX = /\b([a-f0-9]{32})\b/i;
 
 interface KrispMeetingResult {
-  id?: string;
-  title?: string;
-  date?: string;
-  attendees?: string[];
-  duration_minutes?: number;
-  document_id?: string;
+  id?: unknown;
+  title?: unknown;
+  date?: unknown;
+  attendees?: unknown;
+  duration_minutes?: unknown;
+  document_id?: unknown;
   [key: string]: unknown;
 }
 
 interface KrispDocumentResult {
-  id?: string;
-  title?: string;
-  date?: string;
-  attendees?: string[];
-  summary?: string;
-  transcript?: string;
-  key_points?: string[];
-  decisions?: string[];
-  risks?: string[];
+  id?: unknown;
+  title?: unknown;
+  date?: unknown;
+  attendees?: unknown;
+  summary?: unknown;
+  transcript?: unknown;
+  key_points?: unknown;
+  decisions?: unknown;
+  risks?: unknown;
   [key: string]: unknown;
 }
 
 interface KrispActionItemResult {
-  id?: string;
-  title?: string;
-  description?: string;
-  assignee?: string;
-  due_date?: string;
-  priority?: string;
-  status?: string;
+  id?: unknown;
+  title?: unknown;
+  description?: unknown;
+  assignee?: unknown;
+  due_date?: unknown;
+  priority?: unknown;
+  status?: unknown;
   [key: string]: unknown;
 }
 
@@ -96,14 +104,7 @@ export class KrispAdapter implements IMeetingAdapter {
       return [];
     }
 
-    return results.map((m) => ({
-      meetingId: m.id ?? '',
-      title: m.title ?? 'Untitled Meeting',
-      date: m.date ? new Date(m.date) : new Date(),
-      attendees: m.attendees ?? [],
-      source: 'krisp',
-      durationMinutes: m.duration_minutes,
-    }));
+    return results.map((meeting) => normalizeMeetingSummary('krisp', meeting));
   }
 
   async getMeetingNotes(meetingId: string): Promise<MeetingNotes | null> {
@@ -129,29 +130,22 @@ export class KrispAdapter implements IMeetingAdapter {
     // Step 3: Get action items
     const actionItems = await this.getActionItems(meetingId);
 
-    // Build key points from decisions and risks
-    const keyPoints: string[] = [
-      ...(doc.key_points ?? []),
-      ...(doc.decisions ?? []).map((d) => `Decision: ${d}`),
-      ...(doc.risks ?? []).map((r) => `Risk: ${r}`),
-    ];
-
-    return {
+    return normalizeMeetingNotes({
       meetingId,
-      title: doc.title ?? 'Untitled Meeting',
-      date: doc.date ? new Date(doc.date) : new Date(),
-      attendees: doc.attendees ?? [],
-      summary: doc.summary ?? '',
-      keyPoints,
+      title: doc.title,
+      date: doc.date,
+      attendees: doc.attendees,
+      summary: doc.summary,
+      keyPoints: mergeKrispKeyPoints(doc.key_points, doc.decisions, doc.risks),
       actionItems,
       rawTranscript: doc.transcript,
       source: 'krisp',
       metadata: {
         documentId,
-        decisions: doc.decisions,
-        risks: doc.risks,
+        decisions: normalizeTextArray(doc.decisions),
+        risks: normalizeTextArray(doc.risks),
       },
-    };
+    });
   }
 
   async getActionItems(meetingId: string): Promise<ActionItem[]> {
@@ -163,17 +157,7 @@ export class KrispAdapter implements IMeetingAdapter {
       return [];
     }
 
-    return results.map((item) => ({
-      id: item.id,
-      title: item.title ?? '',
-      description: item.description,
-      assignee: item.assignee,
-      dueDate: item.due_date ? new Date(item.due_date) : undefined,
-      priority: this.mapPriority(item.priority),
-      status: this.mapStatus(item.status),
-      source: 'krisp',
-      meetingId,
-    }));
+    return normalizeActionItems('krisp', meetingId, results);
   }
 
   /**
@@ -192,10 +176,10 @@ export class KrispAdapter implements IMeetingAdapter {
     // Look for document_id in search results
     if (searchResults && Array.isArray(searchResults)) {
       for (const result of searchResults) {
-        if (result.document_id) {
+        if (typeof result.document_id === 'string' && result.document_id) {
           return result.document_id;
         }
-        if (result.id) {
+        if (typeof result.id === 'string') {
           const idMatch = result.id.match(DOCUMENT_ID_REGEX);
           if (idMatch) return idMatch[1];
         }
@@ -250,7 +234,11 @@ export class KrispAdapter implements IMeetingAdapter {
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<T | null> {
-    const result = await this.client!.callTool({ name: toolName, arguments: args });
+    const result = await withTimeout(
+      this.client!.callTool({ name: toolName, arguments: args }),
+      config.meetingMcpTimeoutMs,
+      `Krisp MCP tool "${toolName}" timed out`,
+    );
 
     if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
       return null;
@@ -293,24 +281,5 @@ export class KrispAdapter implements IMeetingAdapter {
       serverUrl: this.serverUrl!,
       service: 'krisp',
     });
-  }
-
-  private mapPriority(priority?: string): 'urgent' | 'high' | 'medium' | 'low' | 'none' {
-    if (!priority) return 'none';
-    const normalized = priority.toLowerCase();
-    if (normalized === 'urgent' || normalized === 'critical') return 'urgent';
-    if (normalized === 'high') return 'high';
-    if (normalized === 'medium' || normalized === 'normal') return 'medium';
-    if (normalized === 'low') return 'low';
-    return 'none';
-  }
-
-  private mapStatus(status?: string): 'pending' | 'in-progress' | 'completed' | 'cancelled' {
-    if (!status) return 'pending';
-    const normalized = status.toLowerCase();
-    if (normalized === 'completed' || normalized === 'done') return 'completed';
-    if (normalized === 'in-progress' || normalized === 'in_progress') return 'in-progress';
-    if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
-    return 'pending';
   }
 }

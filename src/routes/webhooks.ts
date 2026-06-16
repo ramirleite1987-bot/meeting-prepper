@@ -1,11 +1,11 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type Router as ExpressRouter } from 'express';
 import { webhookVerify } from '../middleware/webhook-verify.js';
 import { SyncService } from '../services/sync.service.js';
 import { logger } from '../utils/logger.js';
 import { notificationService } from '../services/notification.service.js';
 import { mapLinearStateToTaskStatus } from '../adapters/linear-status.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 const syncService = new SyncService();
 
 interface LinearWebhookPayload {

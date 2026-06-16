@@ -91,6 +91,32 @@ describe('GranolaAdapter', () => {
       expect(results[1].attendees).toEqual(['Charlie']);
     });
 
+    it('should normalize malformed meeting summaries to the internal contract', async () => {
+      mockCallTool.mockResolvedValueOnce(
+        mcpResponse([
+          {
+            id: 123,
+            title: null,
+            date: 'not-a-date',
+            attendees: 'Alice',
+            duration_minutes: '45',
+          },
+        ]),
+      );
+
+      const [result] = await adapter.searchMeetings('weekly');
+
+      expect(result).toMatchObject({
+        meetingId: '',
+        title: 'Untitled Meeting',
+        attendees: [],
+        source: 'granola',
+        durationMinutes: undefined,
+      });
+      expect(result.date).toBeInstanceOf(Date);
+      expect(Number.isNaN(result.date.getTime())).toBe(false);
+    });
+
     it('should return empty array for empty results', async () => {
       mockCallTool.mockResolvedValueOnce(mcpResponse([]));
       const results = await adapter.searchMeetings('nothing');
@@ -155,6 +181,62 @@ describe('GranolaAdapter', () => {
 
       expect(notes!.rawTranscript).toBe('Fetched transcript');
       expect(mockCallTool).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return partial notes when optional transcript lookup fails', async () => {
+      mockCallTool
+        .mockResolvedValueOnce(mcpResponse({ id: 'g1', title: 'Meeting', summary: 'Notes' }))
+        .mockRejectedValueOnce(new Error('transcript timeout'));
+
+      const notes = await adapter.getMeetingNotes('g1');
+
+      expect(notes).not.toBeNull();
+      expect(notes!.summary).toBe('Notes');
+      expect(notes!.rawTranscript).toBeUndefined();
+    });
+
+    it('should normalize malformed meeting details and action items', async () => {
+      mockCallTool.mockResolvedValueOnce(
+        mcpResponse({
+          id: 100,
+          title: null,
+          date: 'invalid-date',
+          attendees: 'Alice',
+          summary: null,
+          notes: 42,
+          key_points: 'single point',
+          action_items: [
+            {
+              id: 100,
+              title: null,
+              due_date: 'invalid-date',
+              priority: 'unknown',
+              status: 'blocked',
+            },
+          ],
+        }),
+      );
+      mockCallTool.mockResolvedValueOnce(mcpResponse({ transcript: 123 }));
+
+      const notes = await adapter.getMeetingNotes('g1');
+
+      expect(notes).not.toBeNull();
+      expect(notes).toMatchObject({
+        title: 'Untitled Meeting',
+        attendees: [],
+        summary: '',
+        keyPoints: [],
+        rawTranscript: undefined,
+      });
+      expect(notes!.date).toBeInstanceOf(Date);
+      expect(Number.isNaN(notes!.date.getTime())).toBe(false);
+      expect(notes!.actionItems[0]).toMatchObject({
+        id: undefined,
+        title: '',
+        dueDate: undefined,
+        priority: 'none',
+        status: 'pending',
+      });
     });
 
     it('should return null when meeting not found', async () => {

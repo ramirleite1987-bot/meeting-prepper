@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Express } from 'express';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
@@ -19,7 +19,7 @@ import { logger } from './utils/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const app = express();
+const app: Express = express();
 
 // Middleware
 app.use(express.json());

@@ -9,43 +9,41 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createMCPClient } from '../utils/mcp-client.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { withTimeout } from '../utils/async-timeout.js';
 import type { IMeetingAdapter, MeetingNotes, MeetingSummary, ActionItem } from './types.js';
+import {
+  firstString,
+  normalizeActionItems,
+  normalizeMeetingNotes,
+  normalizeMeetingSummary,
+  normalizeString,
+  normalizeTextArray,
+} from './meeting-normalizer.js';
 
 const log = logger.child('GranolaAdapter');
 
 const GRANOLA_REST_BASE_URL = 'https://public-api.granola.ai';
 
 interface GranolaMeetingResult {
-  id?: string;
-  title?: string;
-  date?: string;
-  attendees?: string[];
-  duration_minutes?: number;
-  summary?: string;
+  id?: unknown;
+  title?: unknown;
+  date?: unknown;
+  attendees?: unknown;
+  duration_minutes?: unknown;
+  summary?: unknown;
   [key: string]: unknown;
 }
 
 interface GranolaMeetingDetail {
-  id?: string;
-  title?: string;
-  date?: string;
-  attendees?: string[];
-  summary?: string;
-  notes?: string;
-  key_points?: string[];
-  transcript?: string;
-  action_items?: GranolaActionItemResult[];
-  [key: string]: unknown;
-}
-
-interface GranolaActionItemResult {
-  id?: string;
-  title?: string;
-  description?: string;
-  assignee?: string;
-  due_date?: string;
-  priority?: string;
-  status?: string;
+  id?: unknown;
+  title?: unknown;
+  date?: unknown;
+  attendees?: unknown;
+  summary?: unknown;
+  notes?: unknown;
+  key_points?: unknown;
+  transcript?: unknown;
+  action_items?: unknown;
   [key: string]: unknown;
 }
 
@@ -138,14 +136,7 @@ export class GranolaAdapter implements IMeetingAdapter {
       return [];
     }
 
-    return results.map((m) => ({
-      meetingId: m.id ?? '',
-      title: m.title ?? 'Untitled Meeting',
-      date: m.date ? new Date(m.date) : new Date(),
-      attendees: m.attendees ?? [],
-      source: 'granola',
-      durationMinutes: m.duration_minutes,
-    }));
+    return results.map((meeting) => normalizeMeetingSummary('granola', meeting));
   }
 
   private async getMeetingNotesMcp(meetingId: string): Promise<MeetingNotes | null> {
@@ -157,28 +148,28 @@ export class GranolaAdapter implements IMeetingAdapter {
     }
 
     // Optionally fetch transcript (paid plan feature)
-    let transcript = detail.transcript;
+    let transcript = normalizeString(detail.transcript);
     if (!transcript) {
       const transcriptResult = await this.callTool<{ transcript?: string }>(
         'get_meeting_transcript',
         { id: meetingId },
       );
-      transcript = transcriptResult?.transcript;
+      transcript = normalizeString(transcriptResult?.transcript);
     }
 
     const actionItems = this.mapActionItems(detail.action_items, meetingId);
 
-    return {
+    return normalizeMeetingNotes({
       meetingId,
-      title: detail.title ?? 'Untitled Meeting',
-      date: detail.date ? new Date(detail.date) : new Date(),
-      attendees: detail.attendees ?? [],
-      summary: detail.summary ?? detail.notes ?? '',
-      keyPoints: detail.key_points ?? [],
+      title: detail.title,
+      date: detail.date,
+      attendees: detail.attendees,
+      summary: firstString(detail.summary, detail.notes),
+      keyPoints: normalizeTextArray(detail.key_points),
       actionItems,
       rawTranscript: transcript,
       source: 'granola',
-    };
+    });
   }
 
   // ──────────────────────────────────────────────
@@ -199,14 +190,7 @@ export class GranolaAdapter implements IMeetingAdapter {
       return [];
     }
 
-    return data.map((m) => ({
-      meetingId: m.id ?? '',
-      title: m.title ?? 'Untitled Meeting',
-      date: m.date ? new Date(m.date) : new Date(),
-      attendees: m.attendees ?? [],
-      source: 'granola',
-      durationMinutes: m.duration_minutes,
-    }));
+    return data.map((meeting) => normalizeMeetingSummary('granola', meeting));
   }
 
   private async getMeetingNotesRest(meetingId: string): Promise<MeetingNotes | null> {
@@ -221,17 +205,17 @@ export class GranolaAdapter implements IMeetingAdapter {
 
     const actionItems = this.mapActionItems(detail.action_items, meetingId);
 
-    return {
+    return normalizeMeetingNotes({
       meetingId,
-      title: detail.title ?? 'Untitled Meeting',
-      date: detail.date ? new Date(detail.date) : new Date(),
-      attendees: detail.attendees ?? [],
-      summary: detail.summary ?? detail.notes ?? '',
-      keyPoints: detail.key_points ?? [],
+      title: detail.title,
+      date: detail.date,
+      attendees: detail.attendees,
+      summary: firstString(detail.summary, detail.notes),
+      keyPoints: normalizeTextArray(detail.key_points),
       actionItems,
       rawTranscript: detail.transcript,
       source: 'granola',
-    };
+    });
   }
 
   private async restGet<T>(path: string): Promise<T | null> {
@@ -265,22 +249,8 @@ export class GranolaAdapter implements IMeetingAdapter {
   // Shared helpers
   // ──────────────────────────────────────────────
 
-  private mapActionItems(items?: GranolaActionItemResult[], meetingId?: string): ActionItem[] {
-    if (!items || !Array.isArray(items)) {
-      return [];
-    }
-
-    return items.map((item) => ({
-      id: item.id,
-      title: item.title ?? '',
-      description: item.description,
-      assignee: item.assignee,
-      dueDate: item.due_date ? new Date(item.due_date) : undefined,
-      priority: this.mapPriority(item.priority),
-      status: this.mapStatus(item.status),
-      source: 'granola',
-      meetingId,
-    }));
+  private mapActionItems(items: unknown, meetingId: string): ActionItem[] {
+    return normalizeActionItems('granola', meetingId, items);
   }
 
   /**
@@ -321,7 +291,11 @@ export class GranolaAdapter implements IMeetingAdapter {
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<T | null> {
-    const result = await this.client!.callTool({ name: toolName, arguments: args });
+    const result = await withTimeout(
+      this.client!.callTool({ name: toolName, arguments: args }),
+      config.meetingMcpTimeoutMs,
+      `Granola MCP tool "${toolName}" timed out`,
+    );
 
     if (!result.content || !Array.isArray(result.content) || result.content.length === 0) {
       return null;
@@ -364,24 +338,5 @@ export class GranolaAdapter implements IMeetingAdapter {
       serverUrl: this.serverUrl!,
       service: 'granola',
     });
-  }
-
-  private mapPriority(priority?: string): 'urgent' | 'high' | 'medium' | 'low' | 'none' {
-    if (!priority) return 'none';
-    const normalized = priority.toLowerCase();
-    if (normalized === 'urgent' || normalized === 'critical') return 'urgent';
-    if (normalized === 'high') return 'high';
-    if (normalized === 'medium' || normalized === 'normal') return 'medium';
-    if (normalized === 'low') return 'low';
-    return 'none';
-  }
-
-  private mapStatus(status?: string): 'pending' | 'in-progress' | 'completed' | 'cancelled' {
-    if (!status) return 'pending';
-    const normalized = status.toLowerCase();
-    if (normalized === 'completed' || normalized === 'done') return 'completed';
-    if (normalized === 'in-progress' || normalized === 'in_progress') return 'in-progress';
-    if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
-    return 'pending';
   }
 }

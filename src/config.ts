@@ -16,6 +16,7 @@ const configSchema = z.object({
   krispMcpServerUrl: z.string().url().optional(),
 
   granolaMcpServerUrl: z.string().url().optional(),
+  meetingMcpTimeoutMs: z.coerce.number().int().positive().default(10_000),
 
   gogBin: z.string().default('gog'),
   gogAccount: z.string().optional(),
@@ -56,6 +57,7 @@ function loadConfig(): Config {
     calendarIcsUrl: process.env.CALENDAR_ICS_URL || undefined,
     krispMcpServerUrl: process.env.KRISP_MCP_SERVER_URL || undefined,
     granolaMcpServerUrl: process.env.GRANOLA_MCP_SERVER_URL || undefined,
+    meetingMcpTimeoutMs: process.env.MEETING_MCP_TIMEOUT_MS,
     gogBin: process.env.GOG_BIN,
     gogAccount: process.env.GOG_ACCOUNT || undefined,
     gogGmailLabel: process.env.GOG_GMAIL_LABEL,
