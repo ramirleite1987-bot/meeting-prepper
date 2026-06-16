@@ -1,4 +1,4 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Router as ExpressRouter } from 'express';
 import { randomUUID } from 'node:crypto';
 import { queries } from '../db/index.js';
 import { BriefingService } from '../services/briefing.service.js';
@@ -29,8 +29,9 @@ import { logger } from '../utils/logger.js';
 import type { AppError } from '../middleware/error-handler.js';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { notificationService } from '../services/notification.service.js';
+import { clientImportRouter } from './client-import.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // Shared service instances
 const clientContextService = new ClientContextService();
@@ -43,6 +44,8 @@ const linearContextService = new LinearContextService();
 const meetingContextService = new MeetingContextService();
 const commitmentsService = new CommitmentsService();
 const followUpEmailService = new FollowUpEmailService();
+
+router.use(clientImportRouter);
 
 function param(req: Request, name: string): string {
   const val = req.params[name];

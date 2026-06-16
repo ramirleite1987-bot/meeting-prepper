@@ -37,7 +37,7 @@ export interface Migration {
 /** Load and sort migration files from a directory. */
 export function loadMigrations(dir: string): Migration[] {
   const files = readdirSync(dir)
-    .filter((f) => f.endsWith('.sql'))
+    .filter((f) => f.endsWith('.sql') && !f.startsWith('._'))
     .sort();
 
   return files.map((f) => ({

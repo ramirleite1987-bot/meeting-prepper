@@ -219,6 +219,119 @@
   }
 
   // ──────────────────────────────────────────────
+  // Import Clients form
+  // ──────────────────────────────────────────────
+
+  function initClientImportForm() {
+    var form = document.getElementById('client-import-form');
+    if (!form) return;
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      var fileInput = form.querySelector('input[name="clientFile"]');
+      var sheetUrlInput = form.querySelector('input[name="googleSheetUrl"]');
+      var file = fileInput && fileInput.files ? fileInput.files[0] : null;
+      var googleSheetUrl = sheetUrlInput ? sheetUrlInput.value.trim() : '';
+
+      if (!file && !googleSheetUrl) {
+        showToast('Choose a file or paste a Google Sheets URL', 'error');
+        return;
+      }
+
+      var btn = form.querySelector('button[type="submit"]');
+      setLoading(btn, true);
+
+      readClientImportPayload(file, googleSheetUrl)
+        .then(function (payload) {
+          return fetch('/api/clients/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        })
+        .then(function (res) {
+          if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Import failed'); });
+          return res.json();
+        })
+        .then(function (result) {
+          renderClientImportResult(result);
+          showToast(clientImportSummary(result), result.errors && result.errors.length ? 'error' : 'success');
+          if (result.created + result.updated > 0) {
+            setTimeout(function () { window.location.reload(); }, 1200);
+          }
+        })
+        .catch(function (err) {
+          showToast(err.message, 'error');
+        })
+        .finally(function () {
+          setLoading(btn, false);
+        });
+    });
+  }
+
+  function readClientImportPayload(file, googleSheetUrl) {
+    if (!file) {
+      return Promise.resolve({ googleSheetUrl: googleSheetUrl });
+    }
+
+    if (/\.xlsx?$/i.test(file.name)) {
+      return readFileAsArrayBuffer(file).then(function (buffer) {
+        return {
+          filename: file.name,
+          contentBase64: arrayBufferToBase64(buffer),
+        };
+      });
+    }
+
+    return readFileAsText(file).then(function (content) {
+      return {
+        filename: file.name,
+        content: content,
+      };
+    });
+  }
+
+  function readFileAsText(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result || '')); };
+      reader.onerror = function () { reject(new Error('Failed to read file')); };
+      reader.readAsText(file);
+    });
+  }
+
+  function readFileAsArrayBuffer(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(new Error('Failed to read file')); };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function arrayBufferToBase64(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var binary = '';
+    for (var index = 0; index < bytes.length; index++) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+    return window.btoa(binary);
+  }
+
+  function clientImportSummary(result) {
+    return 'Created ' + result.created + ', updated ' + result.updated + ', skipped ' + result.skipped;
+  }
+
+  function renderClientImportResult(result) {
+    var resultEl = document.getElementById('client-import-result');
+    if (!resultEl) return;
+
+    resultEl.textContent = clientImportSummary(result);
+    resultEl.className = 'text-sm ' + (result.errors && result.errors.length ? 'text-red-700' : 'text-green-700');
+  }
+
+  // ──────────────────────────────────────────────
   // Add Meeting form
   // ──────────────────────────────────────────────
 
@@ -570,6 +683,7 @@
     initInlineGenerateButtons();
     initBriefingPageGenerate();
     initAddClientForm();
+    initClientImportForm();
     initAddMeetingForm();
     initLinearProjectSelectors();
     fetchNotifications();

@@ -38,6 +38,7 @@ describe('migration runner', () => {
       '002-second.sql': 'CREATE TABLE b (id TEXT);',
       '001-first.sql': 'CREATE TABLE a (id TEXT);',
       '010-tenth.sql': 'CREATE TABLE c (id TEXT);',
+      '._003-appledouble.sql': 'not a migration',
       'README.md': 'not a migration',
     });
 
