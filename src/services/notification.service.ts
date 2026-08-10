@@ -15,6 +15,7 @@ const log = logger.child('NotificationService');
 export type NotificationType =
   | 'briefing_generated'
   | 'briefing_delivered'
+  | 'meeting_reminder'
   | 'extraction_completed'
   | 'action_item_synced'
   | 'follow_up_email_drafted'

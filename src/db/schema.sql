@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS meetings (
   status TEXT DEFAULT 'scheduled', -- scheduled, in_progress, completed
   briefing TEXT, -- JSON
   briefing_delivered_at DATETIME, -- set when the scheduler auto-delivered the briefing
+  reminder_sent_at DATETIME, -- set when the scheduler sent the pre-meeting reminder
   post_call_notes TEXT, -- JSON
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

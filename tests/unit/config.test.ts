@@ -17,6 +17,7 @@ describe('Config', () => {
     delete process.env.NODE_ENV;
     delete process.env.DATABASE_PATH;
     delete process.env.LOG_LEVEL;
+    delete process.env.REMINDER_LEAD_MINUTES;
 
     const { config } = await import('../../src/config.js');
 
@@ -25,6 +26,7 @@ describe('Config', () => {
     expect(config.databasePath).toBe('./data/meeting-prepper.db');
     expect(config.logLevel).toBe('info');
     expect(config.meetingMcpTimeoutMs).toBe(10000);
+    expect(config.reminderLeadMinutes).toBe(15);
   });
 
   it('should use provided env var values', async () => {
@@ -36,6 +38,7 @@ describe('Config', () => {
     process.env.LINEAR_API_KEY = 'lin-api-xyz';
     process.env.LINEAR_TEAM_ID = 'team-123';
     process.env.MEETING_MCP_TIMEOUT_MS = '2500';
+    process.env.REMINDER_LEAD_MINUTES = '20';
 
     const { config } = await import('../../src/config.js');
 
@@ -47,6 +50,7 @@ describe('Config', () => {
     expect(config.linearApiKey).toBe('lin-api-xyz');
     expect(config.linearTeamId).toBe('team-123');
     expect(config.meetingMcpTimeoutMs).toBe(2500);
+    expect(config.reminderLeadMinutes).toBe(20);
   });
 
   it('should coerce PORT string to number', async () => {

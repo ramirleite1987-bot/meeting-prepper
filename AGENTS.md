@@ -29,7 +29,7 @@ Meeting Prepper is a Node.js 20 TypeScript/Express app that generates client bri
 - Requires Node.js 20+.
 - Default SQLite database path is `./data/meeting-prepper.db`.
 - Optional integrations are configured through environment variables for Obsidian, calendar ICS, Telegram, GitHub, Krisp MCP, Granola MCP, Linear, and the Claude API (`ANTHROPIC_API_KEY` enables LLM briefing synthesis and follow-up email drafting).
-- The background scheduler (pre-meeting briefing delivery + Linear reconciliation) is tuned via `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_MINUTES`, `BRIEFING_LEAD_MINUTES`, and `LINEAR_RECONCILE_INTERVAL_MINUTES`; `SELF_IDENTIFIERS` drives ours/theirs commitment classification.
+- The background scheduler (pre-meeting briefing delivery, starting-soon reminders, and Linear reconciliation) is tuned via `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_MINUTES`, `BRIEFING_LEAD_MINUTES`, `REMINDER_LEAD_MINUTES`, and `LINEAR_RECONCILE_INTERVAL_MINUTES`; `SELF_IDENTIFIERS` drives ours/theirs commitment classification.
 - Never commit local databases, tokens, webhook secrets, or generated runtime data.
 
 ## Implementation notes

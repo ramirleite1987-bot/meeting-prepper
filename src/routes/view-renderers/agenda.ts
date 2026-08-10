@@ -1,4 +1,5 @@
 import type { AgendaBucket, AgendaMeeting, AgendaResponse } from '../../services/agenda.service.js';
+import { config } from '../../config.js';
 import { escapeHtml } from './html.js';
 
 type AgendaBaseViewMeeting = AgendaMeeting & {
@@ -114,6 +115,13 @@ function renderAgendaMeeting(meeting: AgendaViewMeeting): string {
   const postCall = meeting.has_post_call
     ? '<span class="text-xs px-2 py-0.5 rounded bg-purple-100 text-purple-800">post-call</span>'
     : '';
+  const startingSoon =
+    meeting.status === 'scheduled' &&
+    meeting.starts_in_minutes !== null &&
+    meeting.starts_in_minutes >= 0 &&
+    meeting.starts_in_minutes <= config.reminderLeadMinutes
+      ? `<span class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">⏰ ${escapeHtml(meeting.starts_in_label)}</span>`
+      : '';
   const prepare = meeting.needs_briefing
     ? `<form method="post" action="/briefing/prepare">
         <input type="hidden" name="meetingId" value="${escapeHtml(meeting.id)}" />
@@ -132,6 +140,7 @@ function renderAgendaMeeting(meeting: AgendaViewMeeting): string {
       <div class="flex items-center gap-2 flex-wrap">
         <a href="/briefing/${escapeHtml(meeting.id)}" class="font-medium text-indigo-600 hover:underline">${escapeHtml(meeting.title)}</a>
         <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">${escapeHtml(meeting.status)}</span>
+        ${startingSoon}
         ${briefed}
         ${postCall}
       </div>
