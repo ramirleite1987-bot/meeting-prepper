@@ -44,6 +44,10 @@ function migrateExistingSchema(database: Database.Database): void {
   if (!columnExists(database, 'meetings', 'briefing_delivered_at')) {
     database.exec('ALTER TABLE meetings ADD COLUMN briefing_delivered_at DATETIME');
   }
+
+  if (!columnExists(database, 'meetings', 'reminder_sent_at')) {
+    database.exec('ALTER TABLE meetings ADD COLUMN reminder_sent_at DATETIME');
+  }
 }
 export function getDb(): Database.Database {
   if (db) {
@@ -152,6 +156,21 @@ export const queries: Record<string, () => Statement> = {
   markBriefingDelivered: () =>
     getDb().prepare(
       'UPDATE meetings SET briefing_delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ),
+  getMeetingsDueForReminder: () =>
+    getDb().prepare(
+      `SELECT m.*, c.name AS client_name, (m.briefing IS NULL) AS needs_briefing FROM meetings m
+       JOIN clients c ON m.client_id = c.id
+       WHERE m.status = 'scheduled'
+         AND m.reminder_sent_at IS NULL
+         AND m.scheduled_at IS NOT NULL
+         AND m.scheduled_at >= @from
+         AND m.scheduled_at <= @to
+       ORDER BY m.scheduled_at ASC`,
+    ),
+  markReminderSent: () =>
+    getDb().prepare(
+      'UPDATE meetings SET reminder_sent_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     ),
 
   // Meeting Sources

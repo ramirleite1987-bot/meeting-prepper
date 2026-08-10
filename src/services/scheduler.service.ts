@@ -1,11 +1,16 @@
 /**
  * Scheduler Service for the Client Briefing Generator.
- * Background loop with two jobs:
+ * Background loop with three jobs:
  *   1. Pre-meeting delivery — auto-generates the briefing for meetings
  *      starting within the lead window and pushes a notification through the
  *      configured channels (in-app SSE, console, webhook). Each meeting is
  *      delivered once, tracked via meetings.briefing_delivered_at.
- *   2. Linear reconciliation — periodically pulls issue status back from
+ *   2. Pre-meeting reminder — shortly before start time (REMINDER_LEAD_MINUTES,
+ *      default 15) ensures the briefing exists and sends a "starting soon"
+ *      reminder with a direct briefing link. Fires once per meeting, tracked
+ *      via meetings.reminder_sent_at, and never for meetings already marked
+ *      in_progress/completed.
+ *   3. Linear reconciliation — periodically pulls issue status back from
  *      Linear so locally tracked action items don't drift.
  */
 
@@ -36,6 +41,7 @@ export interface SchedulerDeps {
 export interface SchedulerOptions {
   intervalMs?: number;
   briefingLeadMinutes?: number;
+  reminderLeadMinutes?: number;
   reconcileIntervalMs?: number;
 }
 
@@ -51,6 +57,7 @@ export class SchedulerService {
   private readonly deps: SchedulerDeps;
   private readonly intervalMs: number;
   private readonly briefingLeadMinutes: number;
+  private readonly reminderLeadMinutes: number;
   private readonly reconcileIntervalMs: number;
 
   private timer: NodeJS.Timeout | null = null;
@@ -61,6 +68,7 @@ export class SchedulerService {
     this.deps = deps;
     this.intervalMs = options.intervalMs ?? config.schedulerIntervalMinutes * 60_000;
     this.briefingLeadMinutes = options.briefingLeadMinutes ?? config.briefingLeadMinutes;
+    this.reminderLeadMinutes = options.reminderLeadMinutes ?? config.reminderLeadMinutes;
     this.reconcileIntervalMs =
       options.reconcileIntervalMs ?? config.linearReconcileIntervalMinutes * 60_000;
   }
@@ -74,6 +82,7 @@ export class SchedulerService {
     this.log.info('Scheduler started', {
       intervalMs: this.intervalMs,
       briefingLeadMinutes: this.briefingLeadMinutes,
+      reminderLeadMinutes: this.reminderLeadMinutes,
       reconcileIntervalMs: this.reconcileIntervalMs,
     });
     void this.tick();
@@ -93,6 +102,7 @@ export class SchedulerService {
     this.running = true;
     try {
       await this.deliverDueBriefings(now);
+      await this.sendDueReminders(now);
       await this.maybeReconcileLinear(now);
     } catch (error) {
       this.log.error('Scheduler tick failed', {
@@ -143,6 +153,65 @@ export class SchedulerService {
       } catch (error) {
         // Not marked delivered — the next tick retries.
         this.log.error('Failed to deliver pre-meeting briefing', {
+          meetingId: meeting.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private async sendDueReminders(now: Date): Promise<void> {
+    const from = new Date(now.getTime() - PAST_GRACE_MINUTES * 60_000).toISOString();
+    const to = new Date(now.getTime() + this.reminderLeadMinutes * 60_000).toISOString();
+
+    const rows = queries.getMeetingsDueForReminder().all({ from, to }) as Array<
+      Record<string, unknown>
+    >;
+
+    for (const row of rows) {
+      const meeting: DueMeeting = {
+        id: row.id as string,
+        clientId: row.client_id as string,
+        clientName: row.client_name as string,
+        title: row.title as string,
+        scheduledAt: row.scheduled_at as string,
+      };
+      const needsBriefing = Boolean(row.needs_briefing);
+
+      try {
+        // The delivery job normally generates the briefing well before this
+        // point; this is the safety net for meetings that slipped through
+        // (e.g. the process was down during the delivery window).
+        if (needsBriefing) {
+          await this.deps.generateBriefing(meeting);
+        }
+        // Marked before notifying so a reminder is never sent twice;
+        // notification channels are best-effort (allSettled).
+        queries.markReminderSent().run(meeting.id);
+        const startsInMinutes = Math.round(
+          (new Date(meeting.scheduledAt).getTime() - now.getTime()) / 60_000,
+        );
+        const timing =
+          startsInMinutes >= 0
+            ? `starts in ${startsInMinutes} min`
+            : `started ${Math.abs(startsInMinutes)} min ago`;
+        await notificationService.notify(
+          'meeting_reminder',
+          `⏰ Starting soon: ${meeting.title}`,
+          `${meeting.clientName} call ${timing} (${meeting.scheduledAt}) — briefing is ready.`,
+          {
+            meetingId: meeting.id,
+            clientId: meeting.clientId,
+            clientName: meeting.clientName,
+            scheduledAt: meeting.scheduledAt,
+            startsInMinutes,
+            briefingUrl: `/briefing/${meeting.id}`,
+          },
+        );
+        this.log.info('Pre-meeting reminder sent', { meetingId: meeting.id });
+      } catch (error) {
+        // Not marked as sent — the next tick retries.
+        this.log.error('Failed to send pre-meeting reminder', {
           meetingId: meeting.id,
           error: error instanceof Error ? error.message : String(error),
         });

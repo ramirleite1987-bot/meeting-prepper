@@ -41,6 +41,7 @@ const configSchema = z.object({
     .transform((v) => v !== 'false' && v !== '0'),
   schedulerIntervalMinutes: z.coerce.number().int().positive().default(5),
   briefingLeadMinutes: z.coerce.number().int().positive().default(60),
+  reminderLeadMinutes: z.coerce.number().int().positive().default(15),
   linearReconcileIntervalMinutes: z.coerce.number().int().positive().default(30),
 
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -72,6 +73,7 @@ function loadConfig(): Config {
     schedulerEnabled: process.env.SCHEDULER_ENABLED,
     schedulerIntervalMinutes: process.env.SCHEDULER_INTERVAL_MINUTES,
     briefingLeadMinutes: process.env.BRIEFING_LEAD_MINUTES,
+    reminderLeadMinutes: process.env.REMINDER_LEAD_MINUTES,
     linearReconcileIntervalMinutes: process.env.LINEAR_RECONCILE_INTERVAL_MINUTES,
     logLevel: process.env.LOG_LEVEL,
   };
