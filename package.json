@@ -25,6 +25,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "overrides": {
+    "hono": "4.13.16"
+  },
   "lint-staged": {
     "src/**/*.ts": [
       "eslint --fix",
