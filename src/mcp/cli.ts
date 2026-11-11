@@ -81,8 +81,9 @@ async function main(): Promise<void> {
     }
   });
 
-  const server = app.listen(port, () => {
-    log.info('MCP server listening', { port });
+  const host = process.env.LISTEN_HOST || '127.0.0.1';
+  const server = app.listen(port, host, () => {
+    log.info('MCP server listening', { port, host });
   });
 
   const shutdown = async (): Promise<void> => {

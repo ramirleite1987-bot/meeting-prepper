@@ -566,5 +566,49 @@ describe('HTML View Integration Tests', () => {
       expect(res.text).not.toMatch(/\{\{\/if/);
       expect(res.text).not.toMatch(/\{\{\/each/);
     });
+
+    it('GET /search HTML-escapes a title-breaking query', async () => {
+      const payload = '</title><script>alert(1)</script>';
+      const res = await request(app).get('/search').query({ q: payload }).expect(200);
+
+      expect(res.text).not.toContain('</title><script>alert(1)</script>');
+      expect(res.text).toContain('&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+  });
+
+  describe('Action-item status POST', () => {
+    it('rejects an absolute redirect target', async () => {
+      seedData();
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('ai-1', 'm1', 'manual', 'Ship docs', 'hash-1', 'pending');
+
+      const res = await request(app)
+        .post('/action-items/ai-1/status')
+        .type('form')
+        .send({ status: 'completed', redirect: 'https://attacker.example/phish' });
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe('/action-items');
+    });
+
+    it('keeps a relative in-app redirect', async () => {
+      seedData();
+      testDb
+        .prepare(
+          'INSERT INTO action_items (id, meeting_id, source, title, context_hash, status) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('ai-1', 'm1', 'manual', 'Ship docs', 'hash-1', 'pending');
+
+      const res = await request(app)
+        .post('/action-items/ai-1/status')
+        .type('form')
+        .send({ status: 'completed', redirect: '/action-items?status=completed' });
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe('/action-items?status=completed');
+    });
   });
 });

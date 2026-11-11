@@ -24,6 +24,7 @@ import { buildAgenda } from '../services/agenda.service.js';
 import { buildStats } from '../services/stats.service.js';
 import { logger } from '../utils/logger.js';
 import { render as renderSimpleTemplate, escapeHtml } from '../utils/template-engine.js';
+import { safeInternalPath } from '../utils/internal-redirect.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const viewsDir = join(__dirname, '..', 'views');
@@ -47,7 +48,7 @@ function loadTemplate(name: string): string {
 
 function renderLayout(title: string, content: string): string {
   const layout = loadTemplate('layout');
-  return layout.replace('{{title}}', title).replace('{{content}}', content);
+  return layout.replace('{{title}}', escapeHtml(title)).replace('{{content}}', content);
 }
 
 // ──────────────────────────────────────────────
@@ -205,7 +206,7 @@ router.post('/action-items/:id/status', (req: Request, res: Response, next: Next
       return;
     }
     updateActionItemStatusFn(param(req, 'id'), status);
-    const back = (req.body as { redirect?: string }).redirect ?? '/action-items';
+    const back = safeInternalPath((req.body as { redirect?: string }).redirect, '/action-items');
     res.redirect(back);
   } catch (err) {
     next(err);

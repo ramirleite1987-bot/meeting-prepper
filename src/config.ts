@@ -5,6 +5,7 @@ dotenv.config();
 
 const configSchema = z.object({
   port: z.coerce.number().default(3000),
+  listenHost: z.string().min(1).default('127.0.0.1'),
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
 
   databasePath: z.string().default('./data/meeting-prepper.db'),
@@ -52,6 +53,7 @@ export type Config = z.infer<typeof configSchema>;
 function loadConfig(): Config {
   const raw = {
     port: process.env.PORT,
+    listenHost: process.env.LISTEN_HOST,
     nodeEnv: process.env.NODE_ENV,
     databasePath: process.env.DATABASE_PATH,
     obsidianVaultPath: process.env.OBSIDIAN_VAULT_PATH || undefined,
