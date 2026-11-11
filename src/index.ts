@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { getDb, closeDb } from './db/index.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { csrfOrigin } from './middleware/csrf-origin.js';
 import { traceId } from './middleware/trace-id.js';
 import {
   apiRouter,
@@ -24,6 +25,7 @@ const app: Express = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(csrfOrigin);
 app.use(traceId);
 
 // Request logging
@@ -99,8 +101,12 @@ const scheduler = new SchedulerService({
 function start(): void {
   getDb();
 
-  const server = app.listen(config.port, () => {
-    logger.info('Server started', { port: config.port, env: config.nodeEnv });
+  const server = app.listen(config.port, config.listenHost, () => {
+    logger.info('Server started', {
+      port: config.port,
+      host: config.listenHost,
+      env: config.nodeEnv,
+    });
   });
 
   if (config.schedulerEnabled && config.nodeEnv !== 'test') {

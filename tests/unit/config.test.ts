@@ -22,6 +22,7 @@ describe('Config', () => {
     const { config } = await import('../../src/config.js');
 
     expect(config.port).toBe(3000);
+    expect(config.listenHost).toBe('127.0.0.1');
     expect(config.nodeEnv).toBe('development');
     expect(config.databasePath).toBe('./data/meeting-prepper.db');
     expect(config.logLevel).toBe('info');
